@@ -1,4 +1,4 @@
-* { box-sizing: border-box; } /* Évite que les éléments ne débordent de l'écran */
+* { box-sizing: border-box; }
 
 body { 
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -17,7 +17,7 @@ body {
     border-radius: 12px; 
     box-shadow: 0 8px 25px rgba(0,0,0,0.25); 
     width: 100%; 
-    max-width: 600px; /* Ne dépasse pas 600px sur PC, mais s'adapte sur mobile */
+    max-width: 600px; 
     backdrop-filter: blur(5px); 
 }
 
@@ -35,20 +35,22 @@ body {
 .tab-content.active, .sub-tab-content.active { display: block; }
 
 .species-selector-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 15px; background: #f1f3f5; padding: 10px; border-radius: 8px;}
-.species-selector-row label { font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 13px; }
+.species-selector-row label { font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; font-size: 13px; width: auto; } /* Correction ici */
 .species-selector-row input { transform: scale(1.2); }
 
 /* Timers UI */
-.form-row { margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.form-row label { font-weight: bold; font-size: 13px; width: 100%; }
-.radio-group { display: flex; gap: 8px; background: #f8f9fa; padding: 6px 10px; border-radius: 8px; border: 1px solid #ddd; justify-content: center; flex-wrap: wrap; width: 100%;}
-.radio-group label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 3px; font-size: 13px;}
-input[type="number"], input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center; width: 100%;}
-input[type="text"].letter-box { width: 100%; text-transform: uppercase; font-weight: bold; }
+.form-row { margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 10px; }
+.form-row > label:first-child { font-weight: bold; font-size: 13px; width: 100%; margin-bottom: -5px; } /* Le titre prend toute la largeur */
+.form-row > label:last-child { width: auto; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px; margin: 0; } /* Pour Visée 2000 */
+.radio-group { display: flex; gap: 10px; background: #f8f9fa; padding: 6px 12px; border-radius: 8px; border: 1px solid #ddd; justify-content: center; flex-wrap: wrap; flex: 1;}
+.radio-group label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 3px; font-size: 13px; width: auto; margin: 0;} /* CORRECTION DU BUG ICI : width: auto */
+input[type="number"], input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; text-align: center; }
+input[type="number"] { width: 90px; }
+input[type="text"].letter-box { width: 50px; text-transform: uppercase; font-weight: bold; }
 .btn-launch { width: 100%; padding: 14px; background: #28a745; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 15px; margin-top: 5px; box-shadow: 0 4px 10px rgba(40,167,69,0.3); transition: 0.2s; }
 .btn-launch:hover { background: #218838; transform: translateY(-1px); }
 
-/* Double Timer : S'empilent sur mobile, se mettent côte à côte sur PC */
+/* Double Timer */
 .double-timer-container { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
 @media (min-width: 500px) { .double-timer-container { flex-direction: row; } }
 .timer-box { flex: 1; border: 1px solid #ddd; border-radius: 8px; padding: 12px; background: #fff; }
@@ -100,7 +102,7 @@ input[type="text"].letter-box { width: 100%; text-transform: uppercase; font-wei
 
 .compare-box { padding: 10px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; text-align: center; }
 .compare-checkboxes { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
-.compare-checkboxes label { font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.compare-checkboxes label { font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 4px; cursor: pointer; width: auto; } /* Correction ici aussi */
 .compare-result { font-size: 13px; font-weight: bold; color: #28a745; margin-top: 10px; padding: 8px; background: #eef8f0; border-radius: 6px; border: 1px solid #c3e6cb;}
 
 /* Modal Élevage */
