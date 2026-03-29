@@ -173,24 +173,38 @@ function renderCollectionTabs() {
             if (!isChecked) {
                 missingCount++;
                 const missingItem = document.createElement('div');
-                missingItem.style.display = 'flex'; missingItem.style.alignItems = 'center'; missingItem.style.gap = '4px';
-                missingItem.style.background = '#f1f3f5'; missingItem.style.padding = '2px 6px 2px 2px';
-                missingItem.style.borderRadius = '6px'; missingItem.style.border = '1px solid #ddd';
+                missingItem.style.display = 'flex';
+                missingItem.style.alignItems = 'center';
+                missingItem.style.gap = '4px';
+                missingItem.style.background = '#f1f3f5';
+                missingItem.style.padding = '2px 6px 2px 2px';
+                missingItem.style.borderRadius = '6px';
+                missingItem.style.border = '1px solid #ddd';
 
-                const miniBox = document.createElement('div'); miniBox.className = 'mini-box';
-                miniBox.style.background = getBackgroundStyle(color); miniBox.title = color; 
+                const miniBox = document.createElement('div');
+                miniBox.className = 'mini-box';
+                miniBox.style.background = getBackgroundStyle(color);
+                miniBox.title = color; // Infobulle au survol
                 
+                // Récupération de l'autre couleur pour l'abréviation
                 let parts = color.split(" et ");
                 let abbrevText = "";
                 if (parts.length > 1) {
                     let otherColor = (parts[0] === groupName) ? parts[1] : parts[0];
                     abbrevText = colorAbbreviations[otherColor] || otherColor.substring(0, 2);
-                } else { abbrevText = colorAbbreviations[color] || color.substring(0, 2); }
+                } else {
+                    abbrevText = colorAbbreviations[color] || color.substring(0, 2);
+                }
                 
-                const abbrevSpan = document.createElement('span'); abbrevSpan.style.fontSize = '12px';
-                abbrevSpan.style.fontWeight = 'bold'; abbrevSpan.style.color = '#555'; abbrevSpan.innerText = abbrevText;
+                const abbrevSpan = document.createElement('span');
+                abbrevSpan.style.fontSize = '12px';
+                abbrevSpan.style.fontWeight = 'bold';
+                abbrevSpan.style.color = '#555';
+                abbrevSpan.innerText = abbrevText;
 
-                missingItem.appendChild(miniBox); missingItem.appendChild(abbrevSpan); missingMiniGrid.appendChild(missingItem);
+                missingItem.appendChild(miniBox);
+                missingItem.appendChild(abbrevSpan);
+                missingMiniGrid.appendChild(missingItem);
             }
         });
 
@@ -671,35 +685,52 @@ function createTimerDOM(timerObj) {
                 if (sub) {
                     const tEl = document.getElementById(`time_${timerObj.id}_${subKey}`);
                     let elapsedSec = (now - sub.startTime) / 1000;
-                    let remMs = 0;
+                    let remMs = 1; 
 
                     if (sub.col === 'Vert') {
                         let sim = simulateXP(sub.startVal, sub.startJauge, elapsedSec);
-                        remMs = calculateXPTimeRemaining(sim.stat, sim.jauge) * 1000;
                         
                         const inputVal = document.getElementById(`xp_val_${timerObj.id}_${subKey}`);
                         if(inputVal && document.activeElement !== inputVal) inputVal.value = Math.floor(sim.stat);
 
-                        let ttn = getTimeToNextTier(sim.jauge);
-                        if (ttn > 0 && ttn <= 300 && !sub.notifiedTier) {
-                            triggerNotification("Attention: XP Jauge Bientôt Vide !", `L'enclos #${timerObj.name} va baisser de tier dans moins de 5 min.`);
-                            sub.notifiedTier = true; saveTimers();
-                        }
-                        if (ttn > 300) sub.notifiedTier = false;
+                        if (sim.stat >= 857582) {
+                            remMs = 0; 
+                            tEl.innerHTML = `<span style="color:#dc3545; font-weight:bold;">TERMINÉ</span>`;
+                        } else if (sim.jauge <= 0) {
+                            tEl.innerHTML = `<span style="color:#dc3545; font-weight:bold; font-size:11px;">JAUGE VIDE</span>`;
+                        } else {
+                            let ratePerSec = sim.jauge > 90000 ? 4 : sim.jauge > 70000 ? 3 : sim.jauge > 40000 ? 2 : 1;
+                            let ttnSec = getTimeToNextTier(sim.jauge);
+                            let totalSecMaintained = (857582 - sim.stat) / ratePerSec;
 
+                            tEl.innerHTML = `<div style="font-size:11px; text-align:right; line-height:1.4;">
+                                <span style="color:#555">Total (si maintenu):</span> <span style="font-weight:bold">${formatTime(totalSecMaintained * 1000)}</span><br>
+                                <span style="color:#555">Baisse jauge dans:</span> <span style="font-weight:bold; color:#d39e00;">${formatTime(ttnSec * 1000)}</span>
+                            </div>`;
+
+                            if (ttnSec > 0 && ttnSec <= 300 && !sub.notifiedTier) {
+                                triggerNotification("Attention: Jauge XP !", `L'enclos #${timerObj.name} va baisser de tier dans moins de 5 min.`);
+                                sub.notifiedTier = true; saveTimers();
+                            }
+                            if (ttnSec > 300) sub.notifiedTier = false;
+                        }
                     } else {
                         let currentVal = sub.startVal + elapsedSec * (sub.rate / 10);
                         remMs = ((20000 - currentVal) / (sub.rate / 10)) * 1000;
+                        if (remMs <= 0) {
+                            tEl.innerHTML = `<span style="color:#dc3545; font-weight:bold;">TERMINÉ</span>`;
+                        } else {
+                            tEl.innerHTML = formatTime(remMs);
+                        }
                     }
 
                     if (remMs <= 0) {
-                        tEl.innerHTML = `<span style="color:#dc3545; font-weight:bold;">TERMINÉ</span>`;
                         if(subKey==='subA') finishedA = true; else finishedB = true;
                         if(!timerObj[`notified${subKey==='subA'?'A':'B'}`]) {
                             triggerNotification("Chrono Terminé !", `Enclos #${timerObj.name} : ${sub.label} est terminé.`); playBeep();
                             timerObj[`notified${subKey==='subA'?'A':'B'}`] = true; saveTimers();
                         }
-                    } else { tEl.innerHTML = formatTime(remMs); }
+                    }
                 }
             });
 
@@ -728,12 +759,26 @@ window.onload = () => {
             if (t.endTime < now && !t.notified) { missedAlerts.push(`#${t.name} (${t.label})`); t.notified = true; }
         } else if (t.type === 'double') {
             if (t.subA && !t.notifiedA) {
-                let remMs = t.subA.col === 'Vert' ? calculateXPTimeRemaining(simulateXP(t.subA.startVal, t.subA.startJauge, (now - t.subA.startTime)/1000).stat, simulateXP(t.subA.startVal, t.subA.startJauge, (now - t.subA.startTime)/1000).jauge)*1000 : ((20000 - (t.subA.startVal + ((now - t.subA.startTime)/1000)*(t.subA.rate/10))) / (t.subA.rate/10))*1000;
-                if(remMs <= 0) { missedAlerts.push(`#${t.name} (${t.subA.label})`); t.notifiedA = true; }
+                let isFinished = false;
+                if (t.subA.col === 'Vert') {
+                    let sim = simulateXP(t.subA.startVal, t.subA.startJauge, (now - t.subA.startTime)/1000);
+                    if (sim.stat >= 857582) isFinished = true;
+                } else {
+                    let remMs = ((20000 - (t.subA.startVal + ((now - t.subA.startTime)/1000)*(t.subA.rate/10))) / (t.subA.rate/10))*1000;
+                    if (remMs <= 0) isFinished = true;
+                }
+                if(isFinished) { missedAlerts.push(`#${t.name} (${t.subA.label})`); t.notifiedA = true; }
             }
             if (t.subB && !t.notifiedB) {
-                let remMs = t.subB.col === 'Vert' ? calculateXPTimeRemaining(simulateXP(t.subB.startVal, t.subB.startJauge, (now - t.subB.startTime)/1000).stat, simulateXP(t.subB.startVal, t.subB.startJauge, (now - t.subB.startTime)/1000).jauge)*1000 : ((20000 - (t.subB.startVal + ((now - t.subB.startTime)/1000)*(t.subB.rate/10))) / (t.subB.rate/10))*1000;
-                if(remMs <= 0) { missedAlerts.push(`#${t.name} (${t.subB.label})`); t.notifiedB = true; }
+                let isFinished = false;
+                if (t.subB.col === 'Vert') {
+                    let sim = simulateXP(t.subB.startVal, t.subB.startJauge, (now - t.subB.startTime)/1000);
+                    if (sim.stat >= 857582) isFinished = true;
+                } else {
+                    let remMs = ((20000 - (t.subB.startVal + ((now - t.subB.startTime)/1000)*(t.subB.rate/10))) / (t.subB.rate/10))*1000;
+                    if (remMs <= 0) isFinished = true;
+                }
+                if(isFinished) { missedAlerts.push(`#${t.name} (${t.subB.label})`); t.notifiedB = true; }
             }
         }
         createTimerDOM(t);
