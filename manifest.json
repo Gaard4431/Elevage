@@ -1,14 +1,20 @@
 {
-  "name": "Élevage Dofus",
+  "name": "Élevage",
   "short_name": "Élevage",
-  "description": "Gestionnaire d'élevage et timers Dofus.",
+  "description": "Gestionnaire d'élevage et timers.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f4f4f9",
   "theme_color": "#007bff",
-  "icons": [
+"icons": [
     {
-      "src": "icon.png",
+      "src": "icon.png?v=3",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.png?v=3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
