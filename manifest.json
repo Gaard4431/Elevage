@@ -1,7 +1,7 @@
 {
-  "name": "Élevage Gestion",
+  "name": "Élevage Dofus",
   "short_name": "Élevage",
-  "description": "Gestionnaire d'élevage, timers et rentabilité.",
+  "description": "Gestionnaire d'élevage, timers et rentabilité Dofus.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#f4f4f9",
@@ -9,7 +9,7 @@
   "icons": [
     {
       "src": "icon.png",
-      "sizes": "512x512",
+      "sizes": "any",
       "type": "image/png"
     }
   ]
