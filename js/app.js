@@ -17,15 +17,12 @@ function playBeep() {
     oscillator.stop(audioCtx.currentTime + 0.5);
 }
 
-// ==========================================
-// UTILITAIRE SÉCURISÉ (Anti-Crash JSON)
-// ==========================================
 function getSafeLocalData(key, fallback) {
     try {
         const data = localStorage.getItem(key);
         return data ? JSON.parse(data) : fallback;
     } catch (e) {
-        console.error(`Erreur de lecture du localStorage pour ${key}:`, e);
+        console.error(`Erreur localStorage pour ${key}:`, e);
         return fallback;
     }
 }
@@ -92,7 +89,13 @@ function switchSubTab(event, tab) {
     }
 }
 
-function changeSpecies() { initGenerations(); renderCollectionTabs(); }
+function changeSpecies() { 
+    initGenerations(); 
+    renderCollectionTabs(); 
+    // Vider l'input manuel si on change d'espèce pour éviter les erreurs
+    const manualInput = document.getElementById('manual-name');
+    if(manualInput) manualInput.value = '';
+}
 
 function initGenerations() {
     const checkedSpecies = document.querySelector('input[name="species"]:checked');
@@ -791,169 +794,74 @@ function createTimerDOM(timerObj) {
 }
 
 // ==========================================
-// RÉCAP VENTES & OCR MULTI-LIGNES
+// MARCHÉ & STATISTIQUES (SAISIE MANUELLE + PODIUM)
 // ==========================================
 let recapStock = getSafeLocalData('dofus_recap_stock', []);
-let currentBatch = [];
-
-let allMountNames = [];
-if (typeof speciesData !== 'undefined') {
-    for (let species in speciesData) {
-        for (let gen in speciesData[species].colorsByGen) {
-            allMountNames.push(...speciesData[species].colorsByGen[gen]);
-        }
-    }
-    allMountNames = [...new Set(allMountNames)].sort((a, b) => b.length - a.length);
-}
-
 const cleanString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-window.processScreenshot = async function(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+// Fonction d'autocomplétion filtrée selon l'espèce
+window.showSuggestions = function(val) {
+    const list = document.getElementById('autocomplete-list');
+    list.innerHTML = '';
+    if (!val) return;
 
-    const statusDiv = document.getElementById('ocr-status');
-    if(statusDiv) statusDiv.innerHTML = "⏳ Analyse en cours avec Tesseract AI...";
-    
-    try {
-        const worker = await Tesseract.createWorker("fra");
-        const { data: { text } } = await worker.recognize(file);
-        await worker.terminate();
+    const checkedSpecies = document.querySelector('input[name="species"]:checked');
+    if (!checkedSpecies || typeof speciesData === 'undefined') return;
 
-        const lines = text.split('\n');
-        let foundCount = 0;
-        const todayDate = new Date().toISOString().split('T')[0];
-
-        for (let i = 0; i < lines.length; i++) {
-            let line = lines[i];
-            let cleanedLine = cleanString(line);
-            let foundName = allMountNames.find(n => cleanedLine.includes(cleanString(n)));
-            
-            if (foundName) {
-                // Scanne la ligne + la suivante pour trouver le prix sans erreurs
-                let textToSearch = line + " " + (lines[i+1] || "");
-                let numbers = textToSearch.replace(/[\s\.]/g, '').match(/\d{3,}/g); 
-                let price = numbers && numbers.length > 0 ? Math.max(...numbers.map(Number)) : 0;
-                
-                let type = 'listing';
-                if (cleanedLine.includes('vendu') || cleanedLine.includes('achat') || cleanedLine.includes('banque')) {
-                    type = 'sale';
-                }
-                
-                currentBatch.push({ type, name: foundName, price, date: todayDate });
-                foundCount++;
-            }
-        }
-
-        if(statusDiv) {
-            statusDiv.innerHTML = foundCount > 0 
-                ? `✅ ${foundCount} monture(s) détectée(s) ! Vérifiez le tableau ci-dessous.` 
-                : "❌ Aucune monture trouvée. L'image est-elle nette ?";
-        }
-        renderBatchTable();
-        
-    } catch (err) {
-        if(statusDiv) statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
-        console.error(err);
+    let availableColors = [];
+    const colorsObj = speciesData[checkedSpecies.value].colorsByGen;
+    for (let gen in colorsObj) {
+        availableColors.push(...colorsObj[gen]);
     }
-    event.target.value = ""; 
-};
 
-function renderBatchTable() {
-    const container = document.getElementById('batch-container');
-    const tbody = document.getElementById('batch-tbody');
-    if(!container || !tbody) return;
+    const matches = availableColors.filter(c => cleanString(c).includes(cleanString(val)));
     
-    container.style.display = 'block';
-    tbody.innerHTML = '';
-    
-    const addDateInput = document.getElementById('batch-add-date');
-    if(addDateInput && !addDateInput.value) {
-        addDateInput.value = new Date().toISOString().split('T')[0];
-    }
-    
-    currentBatch.forEach((item, index) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>
-                <select onchange="updateBatchItem(${index}, 'type', this.value)" style="padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;">
-                    <option value="listing" ${item.type === 'listing' ? 'selected' : ''}>Mise en vente</option>
-                    <option value="sale" ${item.type === 'sale' ? 'selected' : ''}>Vente</option>
-                </select>
-            </td>
-            <td><input type="text" value="${item.name}" onchange="updateBatchItem(${index}, 'name', this.value)" style="width:90px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
-            <td><input type="number" value="${item.price}" onchange="updateBatchItem(${index}, 'price', this.value)" style="width:65px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
-            <td><input type="date" value="${item.date}" onchange="updateBatchItem(${index}, 'date', this.value)" style="width:100px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
-            <td><button class="delete-btn" style="width:24px; height:24px; font-size:10px;" onclick="removeFromBatch(${index})">✖</button></td>
-        `;
-        tbody.appendChild(tr);
+    matches.slice(0, 10).forEach(match => { // Limite à 10 résultats
+        const div = document.createElement('div');
+        div.className = 'autocomplete-item';
+        div.appendChild(createColorPill(match, false)); // Ajoute l'icône de couleur
+        div.onclick = () => {
+            document.getElementById('manual-name').value = match;
+            list.innerHTML = '';
+        };
+        list.appendChild(div);
     });
-}
-
-window.updateBatchItem = function(index, key, value) {
-    if (key === 'price') value = parseInt(value) || 0;
-    currentBatch[index][key] = value;
 };
 
-window.removeFromBatch = function(index) {
-    currentBatch.splice(index, 1);
-    if(currentBatch.length === 0) {
-        document.getElementById('batch-container').style.display = 'none';
-        document.getElementById('ocr-status').innerHTML = "Tableau vidé.";
-    } else {
-        renderBatchTable();
+// Fermer l'autocomplétion si on clique ailleurs
+document.addEventListener("click", function (e) {
+    if(e.target.id !== "manual-name") {
+        const list = document.getElementById('autocomplete-list');
+        if(list) list.innerHTML = '';
     }
-};
+});
 
-window.addManualToBatch = function() {
-    const type = document.getElementById('batch-add-type').value;
-    const name = document.getElementById('batch-add-name').value.trim();
-    const price = parseInt(document.getElementById('batch-add-price').value) || 0;
-    const date = document.getElementById('batch-add-date').value || new Date().toISOString().split('T')[0];
+window.addManualEntry = function() {
+    const nameEl = document.getElementById('manual-name');
+    const priceEl = document.getElementById('manual-price');
+    const typeEl = document.getElementById('manual-type');
     
-    if(!name || price <= 0) return alert("Veuillez remplir un nom de monture et un prix valide.");
+    const name = nameEl.value.trim();
+    const price = parseInt(priceEl.value) || 0;
+    const type = typeEl.value; // 'sale' ou 'listing'
     
-    currentBatch.push({ type, name, price, date });
-    renderBatchTable();
+    if(!name || price <= 0) return alert("Veuillez entrer un nom valide et un prix !");
     
-    document.getElementById('batch-add-name').value = '';
-    document.getElementById('batch-add-price').value = '';
-};
-
-window.confirmBatch = function() {
-    if (currentBatch.length === 0) return alert("Le tableau est vide.");
-    
-    const autoListCb = document.getElementById('recap-auto-list');
-    const autoList = autoListCb ? autoListCb.checked : false;
-
-    currentBatch.forEach((item, index) => {
-        const uniqueId = Date.now() + index; 
-        const itemTime = new Date(item.date).getTime();
-
-        if (item.type === 'listing') {
-            recapStock.push({ id: uniqueId, name: item.name, listedAt: itemTime, soldAt: null });
-        } else {
-            if (autoList) {
-                recapStock.push({ id: uniqueId, name: item.name, listedAt: itemTime, soldAt: itemTime });
-            } else {
-                let oldestUnsold = recapStock.filter(s => s.name === item.name && s.soldAt === null)
-                                             .sort((a, b) => a.listedAt - b.listedAt)[0];
-                if (oldestUnsold) {
-                    oldestUnsold.soldAt = itemTime;
-                } else {
-                    recapStock.push({ id: uniqueId, name: item.name, listedAt: itemTime, soldAt: itemTime });
-                }
-            }
-        }
-    });
-
+    recapStock.push({ id: Date.now(), name, price, type });
     localStorage.setItem('dofus_recap_stock', JSON.stringify(recapStock));
-    renderRecapTable();
     
-    currentBatch = [];
-    document.getElementById('batch-container').style.display = 'none';
-    document.getElementById('ocr-status').innerHTML = "✅ Données validées et ajoutées à vos statistiques !";
+    nameEl.value = '';
+    priceEl.value = '';
+    renderRecapTable();
 };
+
+window.deleteStats = function(mountName) {
+    if(confirm(`Supprimer tout l'historique pour : ${mountName} ?`)) {
+        recapStock = recapStock.filter(item => item.name !== mountName);
+        localStorage.setItem('dofus_recap_stock', JSON.stringify(recapStock));
+        renderRecapTable();
+    }
+}
 
 function renderRecapTable() {
     const tbody = document.getElementById('recap-tbody');
@@ -961,46 +869,98 @@ function renderRecapTable() {
     tbody.innerHTML = '';
 
     const stats = {};
+    let validMounts = []; // Pour le classement du podium
 
+    // Calcul des données
     recapStock.forEach(item => {
         if (!stats[item.name]) {
-            stats[item.name] = { listed: 0, sold: 0, totalSpeedMs: 0 };
+            stats[item.name] = { listings: 0, sales: 0, sumSalePrice: 0, sumListPrice: 0 };
         }
-        stats[item.name].listed++;
-        if (item.soldAt !== null) {
-            stats[item.name].sold++;
-            let diffMs = item.soldAt - item.listedAt;
-            if (diffMs < 0) diffMs = 0;
-            stats[item.name].totalSpeedMs += diffMs;
+        if (item.type === 'sale') {
+            stats[item.name].sales++;
+            stats[item.name].sumSalePrice += item.price;
+        } else {
+            stats[item.name].listings++;
+            stats[item.name].sumListPrice += item.price;
         }
     });
 
-    for (const [name, data] of Object.entries(stats)) {
-        const taux = Math.round((data.sold / data.listed) * 100);
-        let speedDays = "-";
-        
-        if (data.sold > 0) {
-            const avgSpeedMs = data.totalSpeedMs / data.sold;
-            let days = avgSpeedMs / 86400000; 
-            speedDays = days < 1 ? "< 1 j" : Math.round(days) + " j";
+    // Remplissage du tableau
+    for (const [name, d] of Object.entries(stats)) {
+        let avgSale = d.sales > 0 ? Math.round(d.sumSalePrice / d.sales) : 0;
+        let avgList = d.listings > 0 ? Math.round(d.sumListPrice / d.listings) : 0;
+        let total = d.listings + d.sales;
+        let rate = total > 0 ? Math.round((d.sales / total) * 100) : 0;
+
+        let statusHtml = "-";
+        if (d.listings > 0 && avgSale > 0 && avgList > avgSale) {
+            statusHtml = `<span style="color:#dc3545; font-weight:bold; font-size:10px;">⚠️ Trop cher</span>`;
+        } else if (avgSale > 0) {
+            statusHtml = `<span style="color:#28a745; font-size:10px; font-weight:bold;">✅ Prix OK</span>`;
+        }
+
+        // Pour le podium, on ne classe que celles qui ont au moins 1 vente
+        if(d.sales > 0) {
+            validMounts.push({ name, avgSale, rate, totalSales: d.sales });
         }
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="font-weight: bold; font-size: 12px;">${name}</td>
-            <td>${data.listed}</td>
-            <td style="color: #28a745; font-weight: bold;">${data.sold}</td>
+            <td style="font-weight: bold; font-size: 11px;">${name}</td>
+            <td>${d.listings}</td>
+            <td style="color: #28a745; font-weight: bold;">${d.sales}</td>
             <td>
-                <div style="background:#e9ecef; border-radius:4px; width:100%; height:8px; overflow:hidden; margin-bottom:2px;">
-                    <div style="background:${taux >= 50 ? '#28a745' : '#ffc107'}; height:100%; width:${taux}%;"></div>
+                <div style="background:#e9ecef; border-radius:4px; width:100%; height:6px; overflow:hidden; margin-bottom:2px;">
+                    <div style="background:${rate >= 50 ? '#28a745' : '#ffc107'}; height:100%; width:${rate}%;"></div>
                 </div>
-                <span style="font-size:11px;">${taux}%</span>
+                <span style="font-size:10px;">${rate}%</span>
             </td>
-            <td style="font-weight:bold; color:#0056b3;">${speedDays}</td>
+            <td style="font-weight:bold; color:#0056b3;">${avgSale > 0 ? avgSale.toLocaleString('fr-FR')+' k' : '-'}</td>
+            <td>${statusHtml}</td>
+            <td><button onclick="deleteStats('${name}')" style="background:#dc3545; color:white; border:none; padding:2px 5px; border-radius:4px; cursor:pointer; font-size:10px;">✖</button></td>
         `;
         tbody.appendChild(tr);
     }
+    
+    renderPodium(validMounts);
 }
+
+function renderPodium(mounts) {
+    const container = document.getElementById('podium-container');
+    if(!container) return;
+
+    if(mounts.length < 3) {
+        container.style.display = 'none'; // Pas assez de données pour faire un podium
+        return;
+    }
+
+    // Le score de rentabilité : Prix moyen * (Taux de réussite / 100)
+    mounts.sort((a, b) => {
+        let scoreA = a.avgSale * (a.rate / 100);
+        let scoreB = b.avgSale * (b.rate / 100);
+        return scoreB - scoreA;
+    });
+
+    const top3 = mounts.slice(0, 3);
+    container.style.display = 'block';
+
+    const renderStep = (rank, data) => {
+        const step = document.getElementById(`podium-${rank}`);
+        if(step) {
+            step.innerHTML = `
+                <div class="podium-rank">${rank}</div>
+                <div class="podium-name">${data.name}</div>
+                <div class="podium-score">${data.avgSale.toLocaleString('fr-FR')} k</div>
+                <div style="font-size:10px; color:#666;">(${data.rate}% Vendu)</div>
+            `;
+        }
+    };
+
+    renderStep(1, top3[0]);
+    renderStep(2, top3[1]);
+    renderStep(3, top3[2]);
+}
+
 
 // Lancement au démarrage de l'app
 window.onload = () => {
