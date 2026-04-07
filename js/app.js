@@ -18,9 +18,22 @@ function playBeep() {
 }
 
 // ==========================================
+// UTILITAIRE SÉCURISÉ (Anti-Crash JSON)
+// ==========================================
+function getSafeLocalData(key, fallback) {
+    try {
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : fallback;
+    } catch (e) {
+        console.error(`Erreur de lecture du localStorage pour ${key}:`, e);
+        return fallback;
+    }
+}
+
+// ==========================================
 // COLLECTION & ELEVAGE UI
 // ==========================================
-let collectionData = JSON.parse(localStorage.getItem('dofus_gen10_collection')) || { "Muldo": [], "Dragodinde": [], "Volkorne": [] };
+let collectionData = getSafeLocalData('dofus_gen10_collection', { "Muldo": [], "Dragodinde": [], "Volkorne": [] });
 
 function toggleCollection(species, color, isChecked) {
     if (isChecked) { if (!collectionData[species].includes(color)) collectionData[species].push(color); } 
@@ -59,20 +72,25 @@ function createColorPill(colorName, isHoverable = true) {
     return pill;
 }
 
-function switchMainTab(tab) {
+// CORRECTION BUG EVENT
+function switchMainTab(event, tab) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.main-tab-btn').forEach(el => el.classList.remove('active'));
     document.getElementById('tab-' + tab).classList.add('active');
-    event.target.classList.add('active');
+    if(event && event.target) {
+        event.target.classList.add('active');
+    }
     if(tab === 'gen') { renderCollectionTabs(); }
     if(tab === 'renta') { renderRentaTable(); }
 }
 
-function switchSubTab(tab) {
+function switchSubTab(event, tab) {
     document.querySelectorAll('.sub-tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sub-tab-btn').forEach(el => el.classList.remove('active'));
     document.getElementById('sub-tab-' + tab).classList.add('active');
-    event.target.classList.add('active');
+    if(event && event.target) {
+        event.target.classList.add('active');
+    }
 }
 
 function changeSpecies() { initGenerations(); renderCollectionTabs(); }
@@ -186,7 +204,6 @@ function renderCollectionTabs() {
                 miniBox.style.background = getBackgroundStyle(color);
                 miniBox.title = color; // Infobulle au survol
                 
-                // Récupération de l'autre couleur pour l'abréviation
                 let parts = color.split(" et ");
                 let abbrevText = "";
                 if (parts.length > 1) {
@@ -276,7 +293,7 @@ const rentaSizes = [
     { id: 'normal', name: 'Normal', cap: 3000 }, { id: 'grand', name: 'Grand', cap: 4000 }, { id: 'gigantesque', name: 'Gigantesque', cap: 5000 }
 ];
 
-let rentaData = JSON.parse(localStorage.getItem('dofus_renta_data')) || {};
+let rentaData = getSafeLocalData('dofus_renta_data', {});
 Object.keys(rentaFuels).forEach(f => {
     if(!rentaData[f]) rentaData[f] = {};
     rentaTiers.forEach(t => {
@@ -424,7 +441,7 @@ function calculateComparison() {
 const colorTarget = { 'Jaune': 20000, 'Bleu': 20000, 'Rouge': 20000, 'Vert': 857582 };
 const colorLabel = { 'Jaune': 'Endurance', 'Bleu': 'Abreuvoir', 'Rouge': 'Dragrofesse', 'Vert': 'XP' };
 
-let activeTimers = JSON.parse(localStorage.getItem('dofus_timers_v2')) || [];
+let activeTimers = getSafeLocalData('dofus_timers_v2', []);
 let activeIntervals = {};
 
 function saveTimers() { localStorage.setItem('dofus_timers_v2', JSON.stringify(activeTimers)); }
@@ -743,9 +760,212 @@ function createTimerDOM(timerObj) {
     activeIntervals[timerObj.id] = setInterval(updateDisplay, 1000); updateDisplay();
 }
 
+// ==========================================
+// RÉCAP VENTES & OCR MULTI-LIGNES
+// ==========================================
+let recapStock = getSafeLocalData('dofus_recap_stock', []);
+let currentBatch = [];
+
+let allMountNames = [];
+if (typeof speciesData !== 'undefined') {
+    for (let species in speciesData) {
+        for (let gen in speciesData[species].colorsByGen) {
+            allMountNames.push(...speciesData[species].colorsByGen[gen]);
+        }
+    }
+    allMountNames = [...new Set(allMountNames)].sort((a, b) => b.length - a.length);
+}
+
+const cleanString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+window.processScreenshot = async function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const statusDiv = document.getElementById('ocr-status');
+    if(statusDiv) statusDiv.innerHTML = "⏳ Analyse en cours avec Tesseract AI...";
+    
+    try {
+        const worker = await Tesseract.createWorker("fra");
+        const { data: { text } } = await worker.recognize(file);
+        await worker.terminate();
+
+        const lines = text.split('\n');
+        let foundCount = 0;
+
+        for (let line of lines) {
+            let cleanedLine = cleanString(line);
+            let foundName = allMountNames.find(n => cleanedLine.includes(cleanString(n)));
+            
+            if (foundName) {
+                let numbers = line.replace(/\s/g, '').match(/\d{3,}/g); 
+                let price = numbers && numbers.length > 0 ? Math.max(...numbers.map(Number)) : 0;
+                
+                let type = 'sale';
+                if (cleanedLine.includes('en vente') || cleanedLine.includes('(')) {
+                    type = 'listing';
+                }
+                
+                currentBatch.push({ type, name: foundName, price });
+                foundCount++;
+            }
+        }
+
+        if(statusDiv) {
+            statusDiv.innerHTML = foundCount > 0 
+                ? `✅ ${foundCount} monture(s) détectée(s) ! Vérifiez le tableau ci-dessous.` 
+                : "❌ Aucune monture trouvée. Ajoutez-les manuellement ci-dessous.";
+        }
+        renderBatchTable();
+        
+    } catch (err) {
+        if(statusDiv) statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
+        console.error(err);
+    }
+    event.target.value = ""; 
+};
+
+function renderBatchTable() {
+    const container = document.getElementById('batch-container');
+    const tbody = document.getElementById('batch-tbody');
+    if(!container || !tbody) return;
+    
+    container.style.display = 'block';
+    tbody.innerHTML = '';
+    
+    currentBatch.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>
+                <select onchange="updateBatchItem(${index}, 'type', this.value)" style="padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;">
+                    <option value="sale" ${item.type === 'sale' ? 'selected' : ''}>Vente</option>
+                    <option value="listing" ${item.type === 'listing' ? 'selected' : ''}>Mise en vente</option>
+                </select>
+            </td>
+            <td><input type="text" value="${item.name}" onchange="updateBatchItem(${index}, 'name', this.value)" style="width:100px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><input type="number" value="${item.price}" onchange="updateBatchItem(${index}, 'price', this.value)" style="width:70px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><button class="delete-btn" style="width:24px; height:24px; font-size:10px;" onclick="removeFromBatch(${index})">✖</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+window.updateBatchItem = function(index, key, value) {
+    if (key === 'price') value = parseInt(value) || 0;
+    currentBatch[index][key] = value;
+};
+
+window.removeFromBatch = function(index) {
+    currentBatch.splice(index, 1);
+    if(currentBatch.length === 0) {
+        document.getElementById('batch-container').style.display = 'none';
+        document.getElementById('ocr-status').innerHTML = "Tableau vidé.";
+    } else {
+        renderBatchTable();
+    }
+};
+
+window.addManualToBatch = function() {
+    const type = document.getElementById('batch-add-type').value;
+    const name = document.getElementById('batch-add-name').value.trim();
+    const price = parseInt(document.getElementById('batch-add-price').value) || 0;
+    
+    if(!name || price <= 0) return alert("Veuillez remplir un nom de monture et un prix valide.");
+    
+    currentBatch.push({ type, name, price });
+    renderBatchTable();
+    
+    document.getElementById('batch-add-name').value = '';
+    document.getElementById('batch-add-price').value = '';
+};
+
+window.confirmBatch = function() {
+    if (currentBatch.length === 0) return alert("Le tableau est vide.");
+    
+    const now = Date.now();
+    const autoListCb = document.getElementById('recap-auto-list');
+    const autoList = autoListCb ? autoListCb.checked : false;
+
+    currentBatch.forEach((item, index) => {
+        const uniqueId = now + index; 
+
+        if (item.type === 'listing') {
+            recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: null });
+        } else {
+            if (autoList) {
+                recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
+            } else {
+                let oldestUnsold = recapStock.filter(s => s.name === item.name && s.soldAt === null)
+                                             .sort((a, b) => a.listedAt - b.listedAt)[0];
+                if (oldestUnsold) {
+                    oldestUnsold.soldAt = now;
+                } else {
+                    recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
+                }
+            }
+        }
+    });
+
+    localStorage.setItem('dofus_recap_stock', JSON.stringify(recapStock));
+    renderRecapTable();
+    
+    currentBatch = [];
+    document.getElementById('batch-container').style.display = 'none';
+    document.getElementById('ocr-status').innerHTML = "✅ Données validées et ajoutées à vos statistiques !";
+};
+
+function renderRecapTable() {
+    const tbody = document.getElementById('recap-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const stats = {};
+
+    recapStock.forEach(item => {
+        if (!stats[item.name]) {
+            stats[item.name] = { listed: 0, sold: 0, totalSpeedMs: 0 };
+        }
+        stats[item.name].listed++;
+        if (item.soldAt !== null) {
+            stats[item.name].sold++;
+            let diffMs = item.soldAt - item.listedAt;
+            if (diffMs < 0) diffMs = 0;
+            stats[item.name].totalSpeedMs += diffMs;
+        }
+    });
+
+    for (const [name, data] of Object.entries(stats)) {
+        const taux = Math.round((data.sold / data.listed) * 100);
+        let speedDays = "-";
+        
+        if (data.sold > 0) {
+            const avgSpeedMs = data.totalSpeedMs / data.sold;
+            let days = avgSpeedMs / 86400000; 
+            speedDays = days < 1 ? "< 1 j" : Math.round(days) + " j";
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight: bold; font-size: 12px;">${name}</td>
+            <td>${data.listed}</td>
+            <td style="color: #28a745; font-weight: bold;">${data.sold}</td>
+            <td>
+                <div style="background:#e9ecef; border-radius:4px; width:100%; height:8px; overflow:hidden; margin-bottom:2px;">
+                    <div style="background:${taux >= 50 ? '#28a745' : '#ffc107'}; height:100%; width:${taux}%;"></div>
+                </div>
+                <span style="font-size:11px;">${taux}%</span>
+            </td>
+            <td style="font-weight:bold; color:#0056b3;">${speedDays}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+// Lancement au démarrage de l'app
 window.onload = () => {
     initGenerations();
     renderCollectionTabs();
+    renderRecapTable(); // Affiche le tableau des ventes au démarrage
     
     if ("Notification" in window && Notification.permission === "default") {
         Notification.requestPermission();
