@@ -174,40 +174,45 @@
 
         <div id="tab-recap" class="tab-content">
             <div style="background: #eef8f0; padding: 15px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 15px; text-align: center;">
-                <h4 style="margin: 0 0 10px 0; color: #28a745;">Scanner une capture d'écran du chat</h4>
+                <h4 style="margin: 0 0 5px 0; color: #28a745;">Scanner le chat (Multi-ventes)</h4>
+                <p style="font-size:12px; color:#666; margin-top:0;">L'IA détectera toutes les montures de l'image et préparera un tableau de validation.</p>
                 <input type="file" id="ocr-upload" accept="image/*" onchange="processScreenshot(event)" style="display: none;">
                 <label for="ocr-upload" class="btn-launch" style="display: inline-block; width: auto; padding: 10px 20px; cursor: pointer; margin-bottom: 5px;">📁 Importer une image</label>
                 <div id="ocr-status" style="font-size: 13px; font-weight: bold; color: #555; margin-top: 5px;"></div>
             </div>
 
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 15px;">
-                <h4 style="margin: 0 0 10px 0; font-size: 14px;">Validation manuelle</h4>
-                <div class="form-row">
-                    <label>Type :</label>
-                    <select id="recap-type" onchange="toggleRecapFields()" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; width: 100%;">
-                        <option value="sale">Vente (Vendu : ...)</option>
-                        <option value="listing">Mise en vente (En vente : ...)</option>
+            <div id="batch-container" style="display: none; background: #fff3cd; padding: 15px; border-radius: 8px; border: 1px solid #ffeeba; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: #856404; font-size:14px; text-align:center;">Prévisualisation avant ajout</h4>
+                <div style="overflow-x: auto;">
+                    <table class="renta-table" style="margin-bottom: 10px; width: 100%; min-width:300px;">
+                        <thead>
+                            <tr style="background: #e9ecef; color: #333;">
+                                <th>Type</th>
+                                <th>Monture</th>
+                                <th>Prix</th>
+                                <th>❌</th>
+                            </tr>
+                        </thead>
+                        <tbody id="batch-tbody"></tbody>
+                    </table>
+                </div>
+
+                <div style="display: flex; gap: 5px; margin-bottom: 10px; flex-wrap:wrap; justify-content:center;">
+                    <select id="batch-add-type" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size:12px;">
+                        <option value="sale">Vente</option>
+                        <option value="listing">Mise en vente</option>
                     </select>
+                    <input type="text" id="batch-add-name" placeholder="Nom..." style="padding: 6px; width:100px; font-size:12px; border:1px solid #ccc; border-radius:4px;">
+                    <input type="number" id="batch-add-price" placeholder="Prix..." style="padding: 6px; width:80px; font-size:12px; border:1px solid #ccc; border-radius:4px;">
+                    <button class="btn-launch" style="width:auto; padding:6px 12px; margin:0;" onclick="addManualToBatch()">+ Ajouter</button>
                 </div>
-                <div class="form-row">
-                    <label>Monture :</label>
-                    <input type="text" id="recap-name" placeholder="Ex: Muldo Doré" style="width: 100%;">
-                </div>
-                <div class="form-row">
-                    <label>Prix (kamas) :</label>
-                    <input type="number" id="recap-price" placeholder="Ex: 250000" style="width: 100%;">
-                </div>
-                <div class="form-row" id="row-recap-days" style="display: none;">
-                    <label>Jours restants :</label>
-                    <input type="number" id="recap-days" value="30" style="width: 100%;">
-                </div>
-                <div class="form-row" id="row-recap-auto">
-                    <label style="width: 100%; display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
-                        <input type="checkbox" id="recap-auto-list" style="transform: scale(1.2);"> 
-                        Ajouter aussi cette vente à la "Mise en vente"
-                    </label>
-                </div>
-                <button class="btn-launch" style="background: #007bff; margin-top: 10px;" onclick="saveRecapEntry()">✅ Enregistrer la donnée</button>
+
+                <label style="width: 100%; display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer; font-size:12px; justify-content:center;">
+                    <input type="checkbox" id="recap-auto-list" style="transform: scale(1.2);" checked> 
+                    Créer aussi une "Mise en vente" pour les Ventes
+                </label>
+
+                <button class="btn-launch" style="background: #28a745; margin-top: 10px;" onclick="confirmBatch()">✅ Valider et Enregistrer</button>
             </div>
 
             <table class="renta-table">
