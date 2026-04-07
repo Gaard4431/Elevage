@@ -72,7 +72,6 @@ function createColorPill(colorName, isHoverable = true) {
     return pill;
 }
 
-// CORRECTION BUG EVENT
 function switchMainTab(event, tab) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.main-tab-btn').forEach(el => el.classList.remove('active'));
@@ -96,45 +95,53 @@ function switchSubTab(event, tab) {
 function changeSpecies() { initGenerations(); renderCollectionTabs(); }
 
 function initGenerations() {
-    const species = document.querySelector('input[name="species"]:checked').value;
+    const checkedSpecies = document.querySelector('input[name="species"]:checked');
+    if(!checkedSpecies) return;
+    const species = checkedSpecies.value;
     const currentData = speciesData[species];
+    if(!currentData) return;
     const allGens = Object.keys(currentData.colorsByGen).map(Number).sort((a,b)=>a-b);
     
     const babyGens = allGens.filter(g => g % 2 !== 0 && g > 1);
     const btnContainerBaby = document.getElementById('gen-buttons-baby');
-    btnContainerBaby.innerHTML = '';
-    babyGens.forEach((g, index) => {
-        const btn = document.createElement('button');
-        btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
-        btn.innerText = 'Gen ' + g;
-        btn.onclick = () => {
-            btnContainerBaby.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadColors('baby', g, currentData);
-        };
-        btnContainerBaby.appendChild(btn);
-    });
-    if (babyGens.length > 0) loadColors('baby', babyGens[0], currentData);
+    if(btnContainerBaby) {
+        btnContainerBaby.innerHTML = '';
+        babyGens.forEach((g, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
+            btn.innerText = 'Gen ' + g;
+            btn.onclick = () => {
+                btnContainerBaby.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadColors('baby', g, currentData);
+            };
+            btnContainerBaby.appendChild(btn);
+        });
+        if (babyGens.length > 0) loadColors('baby', babyGens[0], currentData);
+    }
 
     const parentGens = allGens.filter(g => g % 2 === 0 && g < 10);
     const btnContainerParent = document.getElementById('gen-buttons-parent');
-    btnContainerParent.innerHTML = '';
-    parentGens.forEach((g, index) => {
-        const btn = document.createElement('button');
-        btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
-        btn.innerText = 'Gen ' + g;
-        btn.onclick = () => {
-            btnContainerParent.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadColors('parent', g, currentData);
-        };
-        btnContainerParent.appendChild(btn);
-    });
-    if (parentGens.length > 0) loadColors('parent', parentGens[0], currentData);
+    if(btnContainerParent) {
+        btnContainerParent.innerHTML = '';
+        parentGens.forEach((g, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
+            btn.innerText = 'Gen ' + g;
+            btn.onclick = () => {
+                btnContainerParent.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadColors('parent', g, currentData);
+            };
+            btnContainerParent.appendChild(btn);
+        });
+        if (parentGens.length > 0) loadColors('parent', parentGens[0], currentData);
+    }
 }
 
 function loadColors(type, gen, currentData) {
     const container = document.getElementById(`color-results-${type}`);
+    if(!container) return;
     container.innerHTML = '';
     const colors = currentData.colorsByGen[gen] || [];
     colors.forEach(color => {
@@ -145,8 +152,11 @@ function loadColors(type, gen, currentData) {
 }
 
 function renderCollectionTabs() {
-    const species = document.querySelector('input[name="species"]:checked').value;
+    const checkedSpecies = document.querySelector('input[name="species"]:checked');
+    if(!checkedSpecies) return;
+    const species = checkedSpecies.value;
     const currentData = speciesData[species];
+    if(!currentData) return;
     const g9Colors = currentData.colorsByGen["9"] || [];
     const g10Colors = currentData.colorsByGen["10"] || [];
 
@@ -163,6 +173,7 @@ function renderCollectionTabs() {
 
     const collectionContainer = document.getElementById('collection-container');
     const missingContainer = document.getElementById('missing-container');
+    if(!collectionContainer || !missingContainer) return;
     collectionContainer.innerHTML = ''; missingContainer.innerHTML = '';
 
     for (const [groupName, colors] of Object.entries(groups)) {
@@ -202,7 +213,7 @@ function renderCollectionTabs() {
                 const miniBox = document.createElement('div');
                 miniBox.className = 'mini-box';
                 miniBox.style.background = getBackgroundStyle(color);
-                miniBox.title = color; // Infobulle au survol
+                miniBox.title = color; 
                 
                 let parts = color.split(" et ");
                 let abbrevText = "";
@@ -303,8 +314,11 @@ Object.keys(rentaFuels).forEach(f => {
 });
 
 function updateRentaPrice(sizeId, inputEl) {
-    const fuel = document.querySelector('input[name="r_fuel"]:checked').value;
-    const tier = document.querySelector('input[name="r_tier"]:checked').value;
+    const fuelEl = document.querySelector('input[name="r_fuel"]:checked');
+    const tierEl = document.querySelector('input[name="r_tier"]:checked');
+    if(!fuelEl || !tierEl) return;
+    const fuel = fuelEl.value;
+    const tier = tierEl.value;
     const value = inputEl.value;
     
     rentaData[fuel][tier][sizeId] = value;
@@ -331,23 +345,30 @@ function updateRentaPrice(sizeId, inputEl) {
     });
 
     const tbody = document.getElementById('renta-tbody');
-    Array.from(tbody.rows).forEach(row => {
-        const sName = row.cells[0].innerText; 
-        const sId = rentaSizes.find(s => sName.startsWith(s.name)).id;
-        if (validCount >= 2 && sId === bestSizeId) {
-            row.className = 'best-renta-row'; row.cells[2].style.color = '#155724';
-        } else {
-            row.className = ''; row.cells[2].style.color = '#444';
-        }
-    });
-
+    if(tbody) {
+        Array.from(tbody.rows).forEach(row => {
+            const sName = row.cells[0].innerText; 
+            const sObj = rentaSizes.find(s => sName.startsWith(s.name));
+            if(sObj) {
+                if (validCount >= 2 && sObj.id === bestSizeId) {
+                    row.className = 'best-renta-row'; row.cells[2].style.color = '#155724';
+                } else {
+                    row.className = ''; row.cells[2].style.color = '#444';
+                }
+            }
+        });
+    }
     calculateComparison();
 }
 
 function renderRentaTable() {
-    const fuel = document.querySelector('input[name="r_fuel"]:checked').value;
-    const tier = document.querySelector('input[name="r_tier"]:checked').value;
+    const fuelEl = document.querySelector('input[name="r_fuel"]:checked');
+    const tierEl = document.querySelector('input[name="r_tier"]:checked');
+    if(!fuelEl || !tierEl) return;
+    const fuel = fuelEl.value;
+    const tier = tierEl.value;
     const tbody = document.getElementById('renta-tbody');
+    if(!tbody) return;
     
     document.querySelectorAll('.renta-color-header').forEach(el => {
         el.style.background = rentaFuels[fuel].color;
@@ -389,6 +410,7 @@ function renderRentaTable() {
 
 function renderCompareCheckboxes(currentFuel, currentTier) {
     const container = document.getElementById('compare-checkboxes');
+    if(!container) return;
     container.innerHTML = '';
     
     rentaTiers.forEach(t => {
@@ -406,9 +428,13 @@ function renderCompareCheckboxes(currentFuel, currentTier) {
 }
 
 function calculateComparison() {
-    const fuel = document.querySelector('input[name="r_fuel"]:checked').value;
-    const currentTier = document.querySelector('input[name="r_tier"]:checked').value;
+    const fuelEl = document.querySelector('input[name="r_fuel"]:checked');
+    const tierEl = document.querySelector('input[name="r_tier"]:checked');
     const resDiv = document.getElementById('compare-result');
+    if(!fuelEl || !tierEl || !resDiv) return;
+
+    const fuel = fuelEl.value;
+    const currentTier = tierEl.value;
     const checkedTiers = Array.from(document.querySelectorAll('.compare-tier-cb:checked')).map(cb => cb.value);
     
     if (checkedTiers.length === 0) { resDiv.style.display = 'none'; return; }
@@ -553,7 +579,8 @@ function addTimerSimple() {
     if(!perteEl) return alert("Sélectionnez une perte.");
     
     const perte = parseFloat(perteEl.value);
-    const visee2000 = document.getElementById('visee2000').checked;
+    const viseeCb = document.getElementById('visee2000');
+    const visee2000 = viseeCb ? viseeCb.checked : false;
     const cible = visee2000 ? 2000 : 0;
     const valeurAPerdre = valInitiale - cible;
 
@@ -624,6 +651,7 @@ function formatTime(ms) {
 
 function createTimerDOM(timerObj) {
     const list = document.getElementById('list');
+    if(!list) return;
     const timerEl = document.createElement('div');
     timerEl.className = 'timer-item'; timerEl.id = 'timer_' + timerObj.id;
     
@@ -689,8 +717,9 @@ function createTimerDOM(timerObj) {
         if (timerObj.type === 'simple') {
             const remaining = timerObj.endTime - now;
             const tEl = document.getElementById(`time_${timerObj.id}`);
+            if(!tEl) return;
             if (remaining <= 0) {
-                tEl.innerHTML = `<span style="color:#dc3545; font-weight:bold;">TERMINÉ</span>`; timerEl.style.borderLeftColor = '#dc3545'; isCompletelyFinished = true;
+                tEl.innerHTML = `<span style="color:#dc3545; font-weight:bold;">TERMINÉ</span>`; timerEl.classList.add('expired'); isCompletelyFinished = true;
                 if(!timerObj.notified) { triggerNotification("Chrono Terminé !", `Enclos #${timerObj.name} a fini sa ${timerObj.label}.`); playBeep(); timerObj.notified = true; saveTimers(); }
             } else { tEl.innerHTML = formatTime(remaining); }
         } 
@@ -701,6 +730,7 @@ function createTimerDOM(timerObj) {
                 const sub = timerObj[subKey];
                 if (sub) {
                     const tEl = document.getElementById(`time_${timerObj.id}_${subKey}`);
+                    if(!tEl) return;
                     let elapsedSec = (now - sub.startTime) / 1000;
                     let remMs = 1; 
 
@@ -751,7 +781,7 @@ function createTimerDOM(timerObj) {
                 }
             });
 
-            if (finishedA && finishedB) { timerEl.style.borderLeftColor = '#dc3545'; isCompletelyFinished = true; }
+            if (finishedA && finishedB) { timerEl.classList.add('expired'); isCompletelyFinished = true; }
         }
 
         if(isCompletelyFinished) clearInterval(activeIntervals[timerObj.id]);
@@ -792,21 +822,25 @@ window.processScreenshot = async function(event) {
 
         const lines = text.split('\n');
         let foundCount = 0;
+        const todayDate = new Date().toISOString().split('T')[0];
 
-        for (let line of lines) {
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i];
             let cleanedLine = cleanString(line);
             let foundName = allMountNames.find(n => cleanedLine.includes(cleanString(n)));
             
             if (foundName) {
-                let numbers = line.replace(/\s/g, '').match(/\d{3,}/g); 
+                // Scanne la ligne + la suivante pour trouver le prix sans erreurs
+                let textToSearch = line + " " + (lines[i+1] || "");
+                let numbers = textToSearch.replace(/[\s\.]/g, '').match(/\d{3,}/g); 
                 let price = numbers && numbers.length > 0 ? Math.max(...numbers.map(Number)) : 0;
                 
-                let type = 'sale';
-                if (cleanedLine.includes('en vente') || cleanedLine.includes('(')) {
-                    type = 'listing';
+                let type = 'listing';
+                if (cleanedLine.includes('vendu') || cleanedLine.includes('achat') || cleanedLine.includes('banque')) {
+                    type = 'sale';
                 }
                 
-                currentBatch.push({ type, name: foundName, price });
+                currentBatch.push({ type, name: foundName, price, date: todayDate });
                 foundCount++;
             }
         }
@@ -814,7 +848,7 @@ window.processScreenshot = async function(event) {
         if(statusDiv) {
             statusDiv.innerHTML = foundCount > 0 
                 ? `✅ ${foundCount} monture(s) détectée(s) ! Vérifiez le tableau ci-dessous.` 
-                : "❌ Aucune monture trouvée. Ajoutez-les manuellement ci-dessous.";
+                : "❌ Aucune monture trouvée. L'image est-elle nette ?";
         }
         renderBatchTable();
         
@@ -833,17 +867,23 @@ function renderBatchTable() {
     container.style.display = 'block';
     tbody.innerHTML = '';
     
+    const addDateInput = document.getElementById('batch-add-date');
+    if(addDateInput && !addDateInput.value) {
+        addDateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
     currentBatch.forEach((item, index) => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>
                 <select onchange="updateBatchItem(${index}, 'type', this.value)" style="padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;">
-                    <option value="sale" ${item.type === 'sale' ? 'selected' : ''}>Vente</option>
                     <option value="listing" ${item.type === 'listing' ? 'selected' : ''}>Mise en vente</option>
+                    <option value="sale" ${item.type === 'sale' ? 'selected' : ''}>Vente</option>
                 </select>
             </td>
-            <td><input type="text" value="${item.name}" onchange="updateBatchItem(${index}, 'name', this.value)" style="width:100px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
-            <td><input type="number" value="${item.price}" onchange="updateBatchItem(${index}, 'price', this.value)" style="width:70px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><input type="text" value="${item.name}" onchange="updateBatchItem(${index}, 'name', this.value)" style="width:90px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><input type="number" value="${item.price}" onchange="updateBatchItem(${index}, 'price', this.value)" style="width:65px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><input type="date" value="${item.date}" onchange="updateBatchItem(${index}, 'date', this.value)" style="width:100px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
             <td><button class="delete-btn" style="width:24px; height:24px; font-size:10px;" onclick="removeFromBatch(${index})">✖</button></td>
         `;
         tbody.appendChild(tr);
@@ -869,10 +909,11 @@ window.addManualToBatch = function() {
     const type = document.getElementById('batch-add-type').value;
     const name = document.getElementById('batch-add-name').value.trim();
     const price = parseInt(document.getElementById('batch-add-price').value) || 0;
+    const date = document.getElementById('batch-add-date').value || new Date().toISOString().split('T')[0];
     
     if(!name || price <= 0) return alert("Veuillez remplir un nom de monture et un prix valide.");
     
-    currentBatch.push({ type, name, price });
+    currentBatch.push({ type, name, price, date });
     renderBatchTable();
     
     document.getElementById('batch-add-name').value = '';
@@ -882,25 +923,25 @@ window.addManualToBatch = function() {
 window.confirmBatch = function() {
     if (currentBatch.length === 0) return alert("Le tableau est vide.");
     
-    const now = Date.now();
     const autoListCb = document.getElementById('recap-auto-list');
     const autoList = autoListCb ? autoListCb.checked : false;
 
     currentBatch.forEach((item, index) => {
-        const uniqueId = now + index; 
+        const uniqueId = Date.now() + index; 
+        const itemTime = new Date(item.date).getTime();
 
         if (item.type === 'listing') {
-            recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: null });
+            recapStock.push({ id: uniqueId, name: item.name, listedAt: itemTime, soldAt: null });
         } else {
             if (autoList) {
-                recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
+                recapStock.push({ id: uniqueId, name: item.name, listedAt: itemTime, soldAt: itemTime });
             } else {
                 let oldestUnsold = recapStock.filter(s => s.name === item.name && s.soldAt === null)
                                              .sort((a, b) => a.listedAt - b.listedAt)[0];
                 if (oldestUnsold) {
-                    oldestUnsold.soldAt = now;
+                    oldestUnsold.soldAt = itemTime;
                 } else {
-                    recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
+                    recapStock.push({ id: uniqueId, name: item.name, listedAt: itemTime, soldAt: itemTime });
                 }
             }
         }
@@ -965,7 +1006,7 @@ function renderRecapTable() {
 window.onload = () => {
     initGenerations();
     renderCollectionTabs();
-    renderRecapTable(); // Affiche le tableau des ventes au démarrage
+    renderRecapTable(); 
     
     if ("Notification" in window && Notification.permission === "default") {
         Notification.requestPermission();
