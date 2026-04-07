@@ -991,3 +991,12 @@ function renderRecapTable() {
             <td style="font-weight:bold; color:#0056b3;">${speedDays}</td>
         `;
         tbody.appendChild(tr);
+    }
+}
+
+// Lancer le rendu du tableau global au chargement (sans casser les chronos)
+const oldOnload = window.onload;
+window.onload = () => {
+    if(oldOnload) oldOnload();
+    renderRecapTable();
+};
