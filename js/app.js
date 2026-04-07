@@ -18,9 +18,22 @@ function playBeep() {
 }
 
 // ==========================================
+// UTILITAIRE SÉCURISÉ (Anti-Crash JSON)
+// ==========================================
+function getSafeLocalData(key, fallback) {
+    try {
+        const data = localStorage.getItem(key);
+        return data ? JSON.parse(data) : fallback;
+    } catch (e) {
+        console.error(`Erreur de lecture du localStorage pour ${key}:`, e);
+        return fallback;
+    }
+}
+
+// ==========================================
 // COLLECTION & ELEVAGE UI
 // ==========================================
-let collectionData = JSON.parse(localStorage.getItem('dofus_gen10_collection')) || { "Muldo": [], "Dragodinde": [], "Volkorne": [] };
+let collectionData = getSafeLocalData('dofus_gen10_collection', { "Muldo": [], "Dragodinde": [], "Volkorne": [] });
 
 function toggleCollection(species, color, isChecked) {
     if (isChecked) { if (!collectionData[species].includes(color)) collectionData[species].push(color); } 
@@ -38,15 +51,18 @@ function getLuminance(hex) {
 function getBackgroundStyle(colorName) {
     if(!colorName) return "#cccccc";
     let parts = colorName.split(" et ");
-    let col1 = colorPalette[parts[0]] || "#cccccc";
-    let col2 = parts.length > 1 ? (colorPalette[parts[1]] || "#cccccc") : col1;
+    let col1 = typeof colorPalette !== 'undefined' && colorPalette[parts[0]] ? colorPalette[parts[0]] : "#cccccc";
+    let col2 = parts.length > 1 ? (typeof colorPalette !== 'undefined' && colorPalette[parts[1]] ? colorPalette[parts[1]] : "#cccccc") : col1;
     return parts.length === 1 ? col1 : `linear-gradient(135deg, ${col1} 50%, ${col2} 50%)`;
 }
 
 function applyStyleToPill(element, colorName) {
     element.style.background = getBackgroundStyle(colorName);
     let parts = colorName.split(" et ");
-    let avgLum = (getLuminance(colorPalette[parts[0]]) + getLuminance(parts.length > 1 ? colorPalette[parts[1]] : colorPalette[parts[0]])) / 2;
+    let lum1 = typeof colorPalette !== 'undefined' && colorPalette[parts[0]] ? getLuminance(colorPalette[parts[0]]) : 255;
+    let lum2 = typeof colorPalette !== 'undefined' && parts.length > 1 && colorPalette[parts[1]] ? getLuminance(colorPalette[parts[1]]) : lum1;
+    let avgLum = (lum1 + lum2) / 2;
+    
     element.style.color = avgLum > 135 ? '#000000' : '#FFFFFF';
     if(parts.length > 1) element.style.textShadow = avgLum > 135 ? '0px 0px 4px rgba(255,255,255,0.9)' : '0px 0px 4px rgba(0,0,0,0.8)';
     element.innerText = colorName;
@@ -59,64 +75,87 @@ function createColorPill(colorName, isHoverable = true) {
     return pill;
 }
 
-function switchMainTab(tab) {
+// Fix : Attachement explicite à window + Sécurisation de l'event
+window.switchMainTab = function(tab) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.main-tab-btn').forEach(el => el.classList.remove('active'));
-    document.getElementById('tab-' + tab).classList.add('active');
-    event.target.classList.add('active');
+    
+    const targetTab = document.getElementById('tab-' + tab);
+    if(targetTab) targetTab.classList.add('active');
+    
+    if (typeof event !== 'undefined' && event && event.target) {
+        event.target.classList.add('active');
+    }
+    
     if(tab === 'gen') { renderCollectionTabs(); }
     if(tab === 'renta') { renderRentaTable(); }
-}
+};
 
-function switchSubTab(tab) {
+window.switchSubTab = function(tab) {
     document.querySelectorAll('.sub-tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.sub-tab-btn').forEach(el => el.classList.remove('active'));
-    document.getElementById('sub-tab-' + tab).classList.add('active');
-    event.target.classList.add('active');
-}
+    
+    const targetTab = document.getElementById('sub-tab-' + tab);
+    if(targetTab) targetTab.classList.add('active');
+    
+    if (typeof event !== 'undefined' && event && event.target) {
+        event.target.classList.add('active');
+    }
+};
 
 function changeSpecies() { initGenerations(); renderCollectionTabs(); }
 
 function initGenerations() {
-    const species = document.querySelector('input[name="species"]:checked').value;
+    if (typeof speciesData === 'undefined') return;
+    const checkedSpecies = document.querySelector('input[name="species"]:checked');
+    if (!checkedSpecies) return;
+    
+    const species = checkedSpecies.value;
     const currentData = speciesData[species];
+    if (!currentData || !currentData.colorsByGen) return;
+
     const allGens = Object.keys(currentData.colorsByGen).map(Number).sort((a,b)=>a-b);
     
     const babyGens = allGens.filter(g => g % 2 !== 0 && g > 1);
     const btnContainerBaby = document.getElementById('gen-buttons-baby');
-    btnContainerBaby.innerHTML = '';
-    babyGens.forEach((g, index) => {
-        const btn = document.createElement('button');
-        btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
-        btn.innerText = 'Gen ' + g;
-        btn.onclick = () => {
-            btnContainerBaby.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadColors('baby', g, currentData);
-        };
-        btnContainerBaby.appendChild(btn);
-    });
-    if (babyGens.length > 0) loadColors('baby', babyGens[0], currentData);
+    if(btnContainerBaby) {
+        btnContainerBaby.innerHTML = '';
+        babyGens.forEach((g, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
+            btn.innerText = 'Gen ' + g;
+            btn.onclick = () => {
+                btnContainerBaby.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadColors('baby', g, currentData);
+            };
+            btnContainerBaby.appendChild(btn);
+        });
+        if (babyGens.length > 0) loadColors('baby', babyGens[0], currentData);
+    }
 
     const parentGens = allGens.filter(g => g % 2 === 0 && g < 10);
     const btnContainerParent = document.getElementById('gen-buttons-parent');
-    btnContainerParent.innerHTML = '';
-    parentGens.forEach((g, index) => {
-        const btn = document.createElement('button');
-        btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
-        btn.innerText = 'Gen ' + g;
-        btn.onclick = () => {
-            btnContainerParent.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            loadColors('parent', g, currentData);
-        };
-        btnContainerParent.appendChild(btn);
-    });
-    if (parentGens.length > 0) loadColors('parent', parentGens[0], currentData);
+    if(btnContainerParent) {
+        btnContainerParent.innerHTML = '';
+        parentGens.forEach((g, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'gen-btn' + (index === 0 ? ' active' : '');
+            btn.innerText = 'Gen ' + g;
+            btn.onclick = () => {
+                btnContainerParent.querySelectorAll('.gen-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                loadColors('parent', g, currentData);
+            };
+            btnContainerParent.appendChild(btn);
+        });
+        if (parentGens.length > 0) loadColors('parent', parentGens[0], currentData);
+    }
 }
 
 function loadColors(type, gen, currentData) {
     const container = document.getElementById(`color-results-${type}`);
+    if(!container) return;
     container.innerHTML = '';
     const colors = currentData.colorsByGen[gen] || [];
     colors.forEach(color => {
@@ -127,8 +166,14 @@ function loadColors(type, gen, currentData) {
 }
 
 function renderCollectionTabs() {
-    const species = document.querySelector('input[name="species"]:checked').value;
+    if (typeof speciesData === 'undefined') return;
+    const checkedSpecies = document.querySelector('input[name="species"]:checked');
+    if (!checkedSpecies) return;
+
+    const species = checkedSpecies.value;
     const currentData = speciesData[species];
+    if(!currentData) return;
+    
     const g9Colors = currentData.colorsByGen["9"] || [];
     const g10Colors = currentData.colorsByGen["10"] || [];
 
@@ -145,7 +190,8 @@ function renderCollectionTabs() {
 
     const collectionContainer = document.getElementById('collection-container');
     const missingContainer = document.getElementById('missing-container');
-    collectionContainer.innerHTML = ''; missingContainer.innerHTML = '';
+    if(collectionContainer) collectionContainer.innerHTML = ''; 
+    if(missingContainer) missingContainer.innerHTML = '';
 
     for (const [groupName, colors] of Object.entries(groups)) {
         if (colors.length === 0) continue;
@@ -160,7 +206,7 @@ function renderCollectionTabs() {
         let missingCount = 0;
 
         colors.forEach(color => {
-            const isChecked = collectionData[species].includes(color);
+            const isChecked = collectionData[species] && collectionData[species].includes(color);
             const item = document.createElement('label');
             item.className = 'g10-item' + (isChecked ? ' checked' : '');
             
@@ -184,16 +230,15 @@ function renderCollectionTabs() {
                 const miniBox = document.createElement('div');
                 miniBox.className = 'mini-box';
                 miniBox.style.background = getBackgroundStyle(color);
-                miniBox.title = color; // Infobulle au survol
+                miniBox.title = color;
                 
-                // Récupération de l'autre couleur pour l'abréviation
                 let parts = color.split(" et ");
                 let abbrevText = "";
                 if (parts.length > 1) {
                     let otherColor = (parts[0] === groupName) ? parts[1] : parts[0];
-                    abbrevText = colorAbbreviations[otherColor] || otherColor.substring(0, 2);
+                    abbrevText = typeof colorAbbreviations !== 'undefined' && colorAbbreviations[otherColor] ? colorAbbreviations[otherColor] : otherColor.substring(0, 2);
                 } else {
-                    abbrevText = colorAbbreviations[color] || color.substring(0, 2);
+                    abbrevText = typeof colorAbbreviations !== 'undefined' && colorAbbreviations[color] ? colorAbbreviations[color] : color.substring(0, 2);
                 }
                 
                 const abbrevSpan = document.createElement('span');
@@ -208,12 +253,15 @@ function renderCollectionTabs() {
             }
         });
 
-        groupDiv.appendChild(gridDiv); collectionContainer.appendChild(groupDiv);
+        groupDiv.appendChild(gridDiv); 
+        if(collectionContainer) collectionContainer.appendChild(groupDiv);
+        
         if (missingCount > 0) {
-            missingGroupDiv.appendChild(missingMiniGrid); missingContainer.appendChild(missingGroupDiv);
+            missingGroupDiv.appendChild(missingMiniGrid); 
+            if(missingContainer) missingContainer.appendChild(missingGroupDiv);
         } else {
             missingGroupDiv.innerHTML += `<span style="font-size:12px; color:#28a745; font-weight:bold;">Complet ! ✅</span>`;
-            missingContainer.appendChild(missingGroupDiv);
+            if(missingContainer) missingContainer.appendChild(missingGroupDiv);
         }
     }
 }
@@ -256,7 +304,7 @@ function openParentModal(colorName, currentData) {
     }
     document.getElementById('modal').style.display = 'flex';
 }
-function closeModal() { document.getElementById('modal').style.display = 'none'; }
+window.closeModal = function() { document.getElementById('modal').style.display = 'none'; };
 
 
 // ==========================================
@@ -276,7 +324,7 @@ const rentaSizes = [
     { id: 'normal', name: 'Normal', cap: 3000 }, { id: 'grand', name: 'Grand', cap: 4000 }, { id: 'gigantesque', name: 'Gigantesque', cap: 5000 }
 ];
 
-let rentaData = JSON.parse(localStorage.getItem('dofus_renta_data')) || {};
+let rentaData = getSafeLocalData('dofus_renta_data', {});
 Object.keys(rentaFuels).forEach(f => {
     if(!rentaData[f]) rentaData[f] = {};
     rentaTiers.forEach(t => {
@@ -285,9 +333,13 @@ Object.keys(rentaFuels).forEach(f => {
     });
 });
 
-function updateRentaPrice(sizeId, inputEl) {
-    const fuel = document.querySelector('input[name="r_fuel"]:checked').value;
-    const tier = document.querySelector('input[name="r_tier"]:checked').value;
+window.updateRentaPrice = function(sizeId, inputEl) {
+    const fuelChecked = document.querySelector('input[name="r_fuel"]:checked');
+    const tierChecked = document.querySelector('input[name="r_tier"]:checked');
+    if(!fuelChecked || !tierChecked) return;
+    
+    const fuel = fuelChecked.value;
+    const tier = tierChecked.value;
     const value = inputEl.value;
     
     rentaData[fuel][tier][sizeId] = value;
@@ -314,23 +366,32 @@ function updateRentaPrice(sizeId, inputEl) {
     });
 
     const tbody = document.getElementById('renta-tbody');
-    Array.from(tbody.rows).forEach(row => {
-        const sName = row.cells[0].innerText; 
-        const sId = rentaSizes.find(s => sName.startsWith(s.name)).id;
-        if (validCount >= 2 && sId === bestSizeId) {
-            row.className = 'best-renta-row'; row.cells[2].style.color = '#155724';
-        } else {
-            row.className = ''; row.cells[2].style.color = '#444';
-        }
-    });
+    if(tbody) {
+        Array.from(tbody.rows).forEach(row => {
+            const sName = row.cells[0].innerText; 
+            const sObj = rentaSizes.find(s => sName.startsWith(s.name));
+            if(sObj) {
+                if (validCount >= 2 && sObj.id === bestSizeId) {
+                    row.className = 'best-renta-row'; row.cells[2].style.color = '#155724';
+                } else {
+                    row.className = ''; row.cells[2].style.color = '#444';
+                }
+            }
+        });
+    }
 
     calculateComparison();
-}
+};
 
 function renderRentaTable() {
-    const fuel = document.querySelector('input[name="r_fuel"]:checked').value;
-    const tier = document.querySelector('input[name="r_tier"]:checked').value;
+    const fuelChecked = document.querySelector('input[name="r_fuel"]:checked');
+    const tierChecked = document.querySelector('input[name="r_tier"]:checked');
+    if(!fuelChecked || !tierChecked) return;
+    
+    const fuel = fuelChecked.value;
+    const tier = tierChecked.value;
     const tbody = document.getElementById('renta-tbody');
+    if(!tbody) return;
     
     document.querySelectorAll('.renta-color-header').forEach(el => {
         el.style.background = rentaFuels[fuel].color;
@@ -372,6 +433,7 @@ function renderRentaTable() {
 
 function renderCompareCheckboxes(currentFuel, currentTier) {
     const container = document.getElementById('compare-checkboxes');
+    if(!container) return;
     container.innerHTML = '';
     
     rentaTiers.forEach(t => {
@@ -389,9 +451,13 @@ function renderCompareCheckboxes(currentFuel, currentTier) {
 }
 
 function calculateComparison() {
-    const fuel = document.querySelector('input[name="r_fuel"]:checked').value;
-    const currentTier = document.querySelector('input[name="r_tier"]:checked').value;
+    const fuelChecked = document.querySelector('input[name="r_fuel"]:checked');
+    const tierChecked = document.querySelector('input[name="r_tier"]:checked');
     const resDiv = document.getElementById('compare-result');
+    if(!fuelChecked || !tierChecked || !resDiv) return;
+
+    const fuel = fuelChecked.value;
+    const currentTier = tierChecked.value;
     const checkedTiers = Array.from(document.querySelectorAll('.compare-tier-cb:checked')).map(cb => cb.value);
     
     if (checkedTiers.length === 0) { resDiv.style.display = 'none'; return; }
@@ -424,7 +490,7 @@ function calculateComparison() {
 const colorTarget = { 'Jaune': 20000, 'Bleu': 20000, 'Rouge': 20000, 'Vert': 857582 };
 const colorLabel = { 'Jaune': 'Endurance', 'Bleu': 'Abreuvoir', 'Rouge': 'Dragrofesse', 'Vert': 'XP' };
 
-let activeTimers = JSON.parse(localStorage.getItem('dofus_timers_v2')) || [];
+let activeTimers = getSafeLocalData('dofus_timers_v2', []);
 let activeIntervals = {};
 
 function saveTimers() { localStorage.setItem('dofus_timers_v2', JSON.stringify(activeTimers)); }
@@ -491,7 +557,7 @@ function getTimeToNextTier(jauge) {
 window.updateXPTimer = function(id, subKey) {
     const valInput = document.getElementById(`xp_val_${id}_${subKey}`);
     const rateInput = document.querySelector(`input[name="xp_rate_${id}_${subKey}"]:checked`);
-    if(!valInput.value || !rateInput) return alert("Remplissez la valeur et cochez un gain.");
+    if(!valInput || !valInput.value || !rateInput) return alert("Remplissez la valeur et cochez un gain.");
     
     let timer = activeTimers.find(t => t.id === id);
     if(timer && timer[subKey]) {
@@ -501,11 +567,13 @@ window.updateXPTimer = function(id, subKey) {
         timer[subKey].notifiedTier = false; 
         saveTimers();
     }
-}
+};
 
-function updateDoubleColors() {
-    const colA = document.querySelector('input[name="colA"]:checked')?.value;
-    const colB = document.querySelector('input[name="colB"]:checked')?.value;
+window.updateDoubleColors = function() {
+    const colAChecked = document.querySelector('input[name="colA"]:checked');
+    const colBChecked = document.querySelector('input[name="colB"]:checked');
+    const colA = colAChecked ? colAChecked.value : null;
+    const colB = colBChecked ? colBChecked.value : null;
 
     document.querySelectorAll('input[name="colA"]').forEach(el => {
         if(el.value === colB && colB && colB !== 'Vert') { el.disabled = true; el.checked = false; } 
@@ -515,7 +583,7 @@ function updateDoubleColors() {
         if(el.value === colA && colA && colA !== 'Vert') { el.disabled = true; el.checked = false; } 
         else { el.disabled = false; }
     });
-}
+};
 
 function requestNotif() {
     if ("Notification" in window && Notification.permission === "default") {
@@ -523,20 +591,23 @@ function requestNotif() {
     }
 }
 
-function addTimerSimple() {
+window.addTimerSimple = function() {
     initAudio(); requestNotif();
     const numEl = document.querySelector('input[name="num1"]:checked');
-    const lettreEl = document.getElementById('lettre1').value.toUpperCase();
-    if(!numEl) return alert("Sélectionnez un numéro.");
-    const name = numEl.value + lettreEl;
+    const lettreEl = document.getElementById('lettre1');
+    if(!numEl || !lettreEl) return alert("Sélectionnez un numéro et une lettre.");
     
-    const valInitiale = parseFloat(document.getElementById('valeur1').value);
+    const name = numEl.value + lettreEl.value.toUpperCase();
+    const valInput = document.getElementById('valeur1');
+    if(!valInput) return;
+    const valInitiale = parseFloat(valInput.value);
     const perteEl = document.querySelector('input[name="perte1"]:checked');
+    
     if(isNaN(valInitiale)) return alert("Valeur initiale invalide.");
     if(!perteEl) return alert("Sélectionnez une perte.");
     
     const perte = parseFloat(perteEl.value);
-    const visee2000 = document.getElementById('visee2000').checked;
+    const visee2000 = document.getElementById('visee2000') ? document.getElementById('visee2000').checked : false;
     const cible = visee2000 ? 2000 : 0;
     const valeurAPerdre = valInitiale - cible;
 
@@ -546,21 +617,26 @@ function addTimerSimple() {
     const newTimer = { id: Date.now(), type: 'simple', name: name, endTime: endTime, label: 'Sérénité', notified: false };
     
     activeTimers.push(newTimer); saveTimers(); createTimerDOM(newTimer);
-    numEl.checked = false; perteEl.checked = false; document.getElementById('valeur1').value = '';
-}
+    numEl.checked = false; perteEl.checked = false; valInput.value = '';
+};
 
-function addTimerDouble() {
+window.addTimerDouble = function() {
     initAudio(); requestNotif();
     const numEl = document.querySelector('input[name="num2"]:checked');
-    const lettreEl = document.getElementById('lettre2').value.toUpperCase();
-    if(!numEl) return alert("Sélectionnez un numéro de l'enclos.");
-    const name = numEl.value + lettreEl;
+    const lettreEl = document.getElementById('lettre2');
+    if(!numEl || !lettreEl) return alert("Sélectionnez un numéro de l'enclos.");
+    
+    const name = numEl.value + lettreEl.value.toUpperCase();
 
-    const valA_str = document.getElementById('valA').value; const valA = parseFloat(valA_str);
+    const valA_input = document.getElementById('valA');
+    const valB_input = document.getElementById('valB');
+    if(!valA_input || !valB_input) return;
+
+    const valA_str = valA_input.value; const valA = parseFloat(valA_str);
     const gainA_el = document.querySelector('input[name="perteA"]:checked');
     const colA_el = document.querySelector('input[name="colA"]:checked');
     
-    const valB_str = document.getElementById('valB').value; const valB = parseFloat(valB_str);
+    const valB_str = valB_input.value; const valB = parseFloat(valB_str);
     const gainB_el = document.querySelector('input[name="perteB"]:checked');
     const colB_el = document.querySelector('input[name="colB"]:checked');
 
@@ -591,9 +667,9 @@ function addTimerDouble() {
     numEl.checked = false;
     if(gainA_el) gainA_el.checked = false; if(gainB_el) gainB_el.checked = false;
     if(colA_el) colA_el.checked = false; if(colB_el) colB_el.checked = false;
-    document.getElementById('valA').value = ''; document.getElementById('valB').value = '';
-    updateDoubleColors();
-}
+    valA_input.value = ''; valB_input.value = '';
+    window.updateDoubleColors();
+};
 
 function formatTime(ms) {
     if(ms <= 0) return "TERMINÉ";
@@ -607,6 +683,8 @@ function formatTime(ms) {
 
 function createTimerDOM(timerObj) {
     const list = document.getElementById('list');
+    if(!list) return;
+    
     const timerEl = document.createElement('div');
     timerEl.className = 'timer-item'; timerEl.id = 'timer_' + timerObj.id;
     
@@ -672,6 +750,8 @@ function createTimerDOM(timerObj) {
         if (timerObj.type === 'simple') {
             const remaining = timerObj.endTime - now;
             const tEl = document.getElementById(`time_${timerObj.id}`);
+            if(!tEl) return;
+            
             if (remaining <= 0) {
                 tEl.innerHTML = `<span style="color:#dc3545; font-weight:bold;">TERMINÉ</span>`; timerEl.style.borderLeftColor = '#dc3545'; isCompletelyFinished = true;
                 if(!timerObj.notified) { triggerNotification("Chrono Terminé !", `Enclos #${timerObj.name} a fini sa ${timerObj.label}.`); playBeep(); timerObj.notified = true; saveTimers(); }
@@ -684,6 +764,8 @@ function createTimerDOM(timerObj) {
                 const sub = timerObj[subKey];
                 if (sub) {
                     const tEl = document.getElementById(`time_${timerObj.id}_${subKey}`);
+                    if(!tEl) return;
+                    
                     let elapsedSec = (now - sub.startTime) / 1000;
                     let remMs = 1; 
 
@@ -743,9 +825,223 @@ function createTimerDOM(timerObj) {
     activeIntervals[timerObj.id] = setInterval(updateDisplay, 1000); updateDisplay();
 }
 
+// ==========================================
+// RÉCAP VENTES & OCR MULTI-LIGNES
+// ==========================================
+let recapStock = getSafeLocalData('dofus_recap_stock', []);
+let currentBatch = [];
+
+// Fix : Création du dictionnaire d'OCR sécurisé en cas d'absence de données (crash backend)
+let allMountNames = [];
+if (typeof speciesData !== 'undefined') {
+    for (let species in speciesData) {
+        for (let gen in speciesData[species].colorsByGen) {
+            allMountNames.push(...speciesData[species].colorsByGen[gen]);
+        }
+    }
+    allMountNames = [...new Set(allMountNames)].sort((a, b) => b.length - a.length);
+} else {
+    console.warn("Attention: speciesData n'est pas défini. La reconnaissance OCR n'aura pas de mots-clés.");
+}
+
+const cleanString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+window.processScreenshot = async function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const statusDiv = document.getElementById('ocr-status');
+    if(statusDiv) statusDiv.innerHTML = "⏳ Analyse de toutes les lignes de l'image...";
+    
+    try {
+        const worker = await Tesseract.createWorker("fra");
+        const { data: { text } } = await worker.recognize(file);
+        await worker.terminate();
+
+        const lines = text.split('\n');
+        let foundCount = 0;
+
+        for (let line of lines) {
+            let cleanedLine = cleanString(line);
+            let foundName = allMountNames.find(n => cleanedLine.includes(cleanString(n)));
+            
+            if (foundName) {
+                let numbers = line.replace(/\s/g, '').match(/\d{3,}/g); 
+                let price = numbers && numbers.length > 0 ? Math.max(...numbers.map(Number)) : 0;
+                
+                let type = 'sale';
+                if (cleanedLine.includes('en vente') || cleanedLine.includes('(')) {
+                    type = 'listing';
+                }
+                
+                currentBatch.push({ type, name: foundName, price });
+                foundCount++;
+            }
+        }
+
+        if(statusDiv) {
+            statusDiv.innerHTML = foundCount > 0 
+                ? `✅ ${foundCount} monture(s) détectée(s) ! Vérifiez le tableau ci-dessous.` 
+                : "❌ Aucune monture trouvée. Ajoutez-les manuellement via le bouton ci-dessous.";
+        }
+        console.log("Texte brut lu par l'IA :", text);
+        renderBatchTable();
+        
+    } catch (err) {
+        if(statusDiv) statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
+        console.error(err);
+    }
+    event.target.value = ""; 
+};
+
+function renderBatchTable() {
+    const container = document.getElementById('batch-container');
+    const tbody = document.getElementById('batch-tbody');
+    if(!container || !tbody) return;
+    
+    container.style.display = 'block';
+    tbody.innerHTML = '';
+    
+    currentBatch.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>
+                <select onchange="updateBatchItem(${index}, 'type', this.value)" style="padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;">
+                    <option value="sale" ${item.type === 'sale' ? 'selected' : ''}>Vente</option>
+                    <option value="listing" ${item.type === 'listing' ? 'selected' : ''}>Mise en vente</option>
+                </select>
+            </td>
+            <td><input type="text" value="${item.name}" onchange="updateBatchItem(${index}, 'name', this.value)" style="width:100px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><input type="number" value="${item.price}" onchange="updateBatchItem(${index}, 'price', this.value)" style="width:70px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><button class="delete-btn" style="width:24px; height:24px; font-size:10px;" onclick="removeFromBatch(${index})">✖</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+window.updateBatchItem = function(index, key, value) {
+    if (key === 'price') value = parseInt(value) || 0;
+    currentBatch[index][key] = value;
+};
+
+window.removeFromBatch = function(index) {
+    currentBatch.splice(index, 1);
+    if(currentBatch.length === 0) {
+        document.getElementById('batch-container').style.display = 'none';
+        document.getElementById('ocr-status').innerHTML = "Tableau vidé.";
+    } else {
+        renderBatchTable();
+    }
+};
+
+window.addManualToBatch = function() {
+    const type = document.getElementById('batch-add-type').value;
+    const name = document.getElementById('batch-add-name').value.trim();
+    const price = parseInt(document.getElementById('batch-add-price').value) || 0;
+    
+    if(!name || price <= 0) return alert("Veuillez remplir un nom de monture et un prix valide.");
+    
+    currentBatch.push({ type, name, price });
+    renderBatchTable();
+    
+    document.getElementById('batch-add-name').value = '';
+    document.getElementById('batch-add-price').value = '';
+};
+
+window.confirmBatch = function() {
+    if (currentBatch.length === 0) return alert("Le tableau est vide.");
+    
+    const now = Date.now();
+    const autoListCb = document.getElementById('recap-auto-list');
+    const autoList = autoListCb ? autoListCb.checked : false;
+
+    currentBatch.forEach((item, index) => {
+        const uniqueId = now + index; 
+
+        if (item.type === 'listing') {
+            recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: null });
+        } else {
+            if (autoList) {
+                recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
+            } else {
+                let oldestUnsold = recapStock.filter(s => s.name === item.name && s.soldAt === null)
+                                             .sort((a, b) => a.listedAt - b.listedAt)[0];
+                if (oldestUnsold) {
+                    oldestUnsold.soldAt = now;
+                } else {
+                    recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
+                }
+            }
+        }
+    });
+
+    localStorage.setItem('dofus_recap_stock', JSON.stringify(recapStock));
+    renderRecapTable();
+    
+    currentBatch = [];
+    document.getElementById('batch-container').style.display = 'none';
+    document.getElementById('ocr-status').innerHTML = "✅ Données validées et ajoutées à vos statistiques !";
+};
+
+function renderRecapTable() {
+    const tbody = document.getElementById('recap-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const stats = {};
+
+    recapStock.forEach(item => {
+        if (!stats[item.name]) {
+            stats[item.name] = { listed: 0, sold: 0, totalSpeedMs: 0 };
+        }
+        
+        stats[item.name].listed++;
+        
+        if (item.soldAt !== null) {
+            stats[item.name].sold++;
+            let diffMs = item.soldAt - item.listedAt;
+            if (diffMs < 0) diffMs = 0;
+            stats[item.name].totalSpeedMs += diffMs;
+        }
+    });
+
+    for (const [name, data] of Object.entries(stats)) {
+        const taux = Math.round((data.sold / data.listed) * 100);
+        let speedDays = "-";
+        
+        if (data.sold > 0) {
+            const avgSpeedMs = data.totalSpeedMs / data.sold;
+            let days = avgSpeedMs / 86400000; 
+            speedDays = days < 1 ? "< 1 j" : Math.round(days) + " j";
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight: bold; font-size: 12px;">${name}</td>
+            <td>${data.listed}</td>
+            <td style="color: #28a745; font-weight: bold;">${data.sold}</td>
+            <td>
+                <div style="background:#e9ecef; border-radius:4px; width:100%; height:8px; overflow:hidden; margin-bottom:2px;">
+                    <div style="background:${taux >= 50 ? '#28a745' : '#ffc107'}; height:100%; width:${taux}%;"></div>
+                </div>
+                <span style="font-size:11px;">${taux}%</span>
+            </td>
+            <td style="font-weight:bold; color:#0056b3;">${speedDays}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+// ==========================================
+// INITIALISATION AU CHARGEMENT DE LA PAGE
+// ==========================================
+const oldOnload = window.onload;
 window.onload = () => {
+    if(oldOnload) oldOnload();
+    
     initGenerations();
     renderCollectionTabs();
+    renderRecapTable();
     
     if ("Notification" in window && Notification.permission === "default") {
         Notification.requestPermission();
@@ -792,211 +1088,4 @@ window.onload = () => {
             icon: "https://cdn-icons-png.flaticon.com/512/3233/3233483.png"
         });
     }
-};
-// ==========================================
-// RÉCAP VENTES & OCR MULTI-LIGNES
-// ==========================================
-let recapStock = JSON.parse(localStorage.getItem('dofus_recap_stock')) || [];
-let currentBatch = [];
-
-// Liste de toutes les couleurs pour aider l'IA
-let allMountNames = [];
-for (let species in speciesData) {
-    for (let gen in speciesData[species].colorsByGen) {
-        allMountNames.push(...speciesData[species].colorsByGen[gen]);
-    }
-}
-allMountNames = [...new Set(allMountNames)].sort((a, b) => b.length - a.length);
-const cleanString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-async function processScreenshot(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const statusDiv = document.getElementById('ocr-status');
-    statusDiv.innerHTML = "⏳ Analyse de toutes les lignes de l'image...";
-    
-    try {
-        const worker = await Tesseract.createWorker("fra");
-        const { data: { text } } = await worker.recognize(file);
-        await worker.terminate();
-
-        const lines = text.split('\n');
-        let foundCount = 0;
-
-        for (let line of lines) {
-            let cleanedLine = cleanString(line);
-            let foundName = allMountNames.find(n => cleanedLine.includes(cleanString(n)));
-            
-            if (foundName) {
-                // Trouver le prix (le nombre le plus grand sur la ligne)
-                let numbers = line.replace(/\s/g, '').match(/\d{3,}/g); 
-                let price = numbers && numbers.length > 0 ? Math.max(...numbers.map(Number)) : 0;
-                
-                // Déterminer si c'est une mise en vente ou une vente conclue
-                let type = 'sale';
-                if (cleanedLine.includes('en vente') || cleanedLine.includes('(')) {
-                    type = 'listing';
-                }
-                
-                currentBatch.push({ type, name: foundName, price });
-                foundCount++;
-            }
-        }
-
-        statusDiv.innerHTML = foundCount > 0 
-            ? `✅ ${foundCount} monture(s) détectée(s) ! Vérifiez le tableau ci-dessous.` 
-            : "❌ Aucune monture trouvée. Ajoutez-les manuellement via le bouton ci-dessous.";
-        
-        console.log("Texte brut lu par l'IA :", text);
-        renderBatchTable();
-        
-    } catch (err) {
-        statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
-        console.error(err);
-    }
-    
-    event.target.value = ""; // Réinitialise l'input pour pouvoir renvoyer la même image
-}
-
-function renderBatchTable() {
-    document.getElementById('batch-container').style.display = 'block';
-    const tbody = document.getElementById('batch-tbody');
-    tbody.innerHTML = '';
-    
-    currentBatch.forEach((item, index) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>
-                <select onchange="updateBatchItem(${index}, 'type', this.value)" style="padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;">
-                    <option value="sale" ${item.type === 'sale' ? 'selected' : ''}>Vente</option>
-                    <option value="listing" ${item.type === 'listing' ? 'selected' : ''}>Mise en vente</option>
-                </select>
-            </td>
-            <td><input type="text" value="${item.name}" onchange="updateBatchItem(${index}, 'name', this.value)" style="width:100px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
-            <td><input type="number" value="${item.price}" onchange="updateBatchItem(${index}, 'price', this.value)" style="width:70px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
-            <td><button class="delete-btn" style="width:24px; height:24px; font-size:10px;" onclick="removeFromBatch(${index})">✖</button></td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-function updateBatchItem(index, key, value) {
-    if (key === 'price') value = parseInt(value) || 0;
-    currentBatch[index][key] = value;
-}
-
-function removeFromBatch(index) {
-    currentBatch.splice(index, 1);
-    if(currentBatch.length === 0) {
-        document.getElementById('batch-container').style.display = 'none';
-        document.getElementById('ocr-status').innerHTML = "Tableau vidé.";
-    } else {
-        renderBatchTable();
-    }
-}
-
-function addManualToBatch() {
-    const type = document.getElementById('batch-add-type').value;
-    const name = document.getElementById('batch-add-name').value.trim();
-    const price = parseInt(document.getElementById('batch-add-price').value) || 0;
-    
-    if(!name || price <= 0) return alert("Veuillez remplir un nom de monture et un prix valide.");
-    
-    currentBatch.push({ type, name, price });
-    renderBatchTable();
-    
-    document.getElementById('batch-add-name').value = '';
-    document.getElementById('batch-add-price').value = '';
-}
-
-function confirmBatch() {
-    if (currentBatch.length === 0) return alert("Le tableau est vide.");
-    
-    const now = Date.now();
-    const autoList = document.getElementById('recap-auto-list').checked;
-
-    currentBatch.forEach((item, index) => {
-        // On rajoute l'index au Date.now() pour éviter que les IDs soient identiques si ça boucle trop vite
-        const uniqueId = now + index; 
-
-        if (item.type === 'listing') {
-            recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: null });
-        } else {
-            if (autoList) {
-                recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
-            } else {
-                let oldestUnsold = recapStock.filter(s => s.name === item.name && s.soldAt === null)
-                                             .sort((a, b) => a.listedAt - b.listedAt)[0];
-                if (oldestUnsold) {
-                    oldestUnsold.soldAt = now;
-                } else {
-                    recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
-                }
-            }
-        }
-    });
-
-    localStorage.setItem('dofus_recap_stock', JSON.stringify(recapStock));
-    renderRecapTable();
-    
-    currentBatch = [];
-    document.getElementById('batch-container').style.display = 'none';
-    document.getElementById('ocr-status').innerHTML = "✅ Données validées et ajoutées à vos statistiques !";
-}
-
-function renderRecapTable() {
-    const tbody = document.getElementById('recap-tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-
-    const stats = {};
-
-    recapStock.forEach(item => {
-        if (!stats[item.name]) {
-            stats[item.name] = { listed: 0, sold: 0, totalSpeedMs: 0 };
-        }
-        
-        stats[item.name].listed++;
-        
-        if (item.soldAt !== null) {
-            stats[item.name].sold++;
-            let diffMs = item.soldAt - item.listedAt;
-            if (diffMs < 0) diffMs = 0;
-            stats[item.name].totalSpeedMs += diffMs;
-        }
-    });
-
-    for (const [name, data] of Object.entries(stats)) {
-        const taux = Math.round((data.sold / data.listed) * 100);
-        let speedDays = "-";
-        
-        if (data.sold > 0) {
-            const avgSpeedMs = data.totalSpeedMs / data.sold;
-            let days = avgSpeedMs / 86400000; // Millisecondes dans un jour
-            speedDays = days < 1 ? "< 1 j" : Math.round(days) + " j";
-        }
-
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td style="font-weight: bold; font-size: 12px;">${name}</td>
-            <td>${data.listed}</td>
-            <td style="color: #28a745; font-weight: bold;">${data.sold}</td>
-            <td>
-                <div style="background:#e9ecef; border-radius:4px; width:100%; height:8px; overflow:hidden; margin-bottom:2px;">
-                    <div style="background:${taux >= 50 ? '#28a745' : '#ffc107'}; height:100%; width:${taux}%;"></div>
-                </div>
-                <span style="font-size:11px;">${taux}%</span>
-            </td>
-            <td style="font-weight:bold; color:#0056b3;">${speedDays}</td>
-        `;
-        tbody.appendChild(tr);
-    }
-}
-
-// Lancer le rendu du tableau global au chargement (sans casser les chronos)
-const oldOnload = window.onload;
-window.onload = () => {
-    if(oldOnload) oldOnload();
-    renderRecapTable();
 };
