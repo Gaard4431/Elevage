@@ -794,121 +794,160 @@ window.onload = () => {
     }
 };
 // ==========================================
-// RÉCAP VENTES & OCR
+// RÉCAP VENTES & OCR MULTI-LIGNES
 // ==========================================
 let recapStock = JSON.parse(localStorage.getItem('dofus_recap_stock')) || [];
+let currentBatch = [];
 
-function toggleRecapFields() {
-    const type = document.getElementById('recap-type').value;
-    // On masque la ligne des "jours restants" puisqu'on met la date d'aujourd'hui par défaut
-    const daysRow = document.getElementById('row-recap-days');
-    if (daysRow) daysRow.style.display = 'none';
-    
-    document.getElementById('row-recap-auto').style.display = type === 'sale' ? 'flex' : 'none';
+// Liste de toutes les couleurs pour aider l'IA
+let allMountNames = [];
+for (let species in speciesData) {
+    for (let gen in speciesData[species].colorsByGen) {
+        allMountNames.push(...speciesData[species].colorsByGen[gen]);
+    }
 }
+allMountNames = [...new Set(allMountNames)].sort((a, b) => b.length - a.length);
+const cleanString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 async function processScreenshot(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     const statusDiv = document.getElementById('ocr-status');
-    statusDiv.innerHTML = "⏳ Recherche du nom de la monture...";
-
+    statusDiv.innerHTML = "⏳ Analyse de toutes les lignes de l'image...";
+    
     try {
         const worker = await Tesseract.createWorker("fra");
         const { data: { text } } = await worker.recognize(file);
         await worker.terminate();
 
-        // 1. Générer la liste de TOUS les noms de montures (Muldos, DD, Volkornes)
-        let allMountNames = [];
-        for (let species in speciesData) {
-            for (let gen in speciesData[species].colorsByGen) {
-                allMountNames.push(...speciesData[species].colorsByGen[gen]);
+        const lines = text.split('\n');
+        let foundCount = 0;
+
+        for (let line of lines) {
+            let cleanedLine = cleanString(line);
+            let foundName = allMountNames.find(n => cleanedLine.includes(cleanString(n)));
+            
+            if (foundName) {
+                // Trouver le prix (le nombre le plus grand sur la ligne)
+                let numbers = line.replace(/\s/g, '').match(/\d{3,}/g); 
+                let price = numbers && numbers.length > 0 ? Math.max(...numbers.map(Number)) : 0;
+                
+                // Déterminer si c'est une mise en vente ou une vente conclue
+                let type = 'sale';
+                if (cleanedLine.includes('en vente') || cleanedLine.includes('(')) {
+                    type = 'listing';
+                }
+                
+                currentBatch.push({ type, name: foundName, price });
+                foundCount++;
             }
         }
-        // Trier par longueur décroissante (pour trouver "Doré et Emeraude" avant "Doré")
-        allMountNames = [...new Set(allMountNames)].sort((a, b) => b.length - a.length);
 
-        // Nettoyer le texte de l'IA (retirer les accents et passer en minuscules)
-        const cleanString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-        const cleanedText = cleanString(text);
-
-        let foundName = "";
-        for (let name of allMountNames) {
-            if (cleanedText.includes(cleanString(name))) {
-                foundName = name;
-                break;
-            }
-        }
-
-        // 2. Tenter de trouver le prix (le plus grand nombre trouvé)
-        let numbers = text.replace(/\s/g, '').match(/\d{3,}/g); 
-        let likelyPrice = "";
-        if (numbers && numbers.length > 0) {
-            likelyPrice = Math.max(...numbers.map(Number));
-        }
-
-        if (foundName) {
-            document.getElementById('recap-name').value = foundName;
-            if (likelyPrice) document.getElementById('recap-price').value = likelyPrice;
-            statusDiv.innerHTML = "✅ Monture trouvée ! Vérifiez le prix et validez.";
-        } else {
-            statusDiv.innerHTML = "❌ Nom introuvable. Remplissez manuellement.";
-            console.log("Texte lu par l'IA :", text); // Pour débuguer si besoin (F12)
-        }
+        statusDiv.innerHTML = foundCount > 0 
+            ? `✅ ${foundCount} monture(s) détectée(s) ! Vérifiez le tableau ci-dessous.` 
+            : "❌ Aucune monture trouvée. Ajoutez-les manuellement via le bouton ci-dessous.";
         
-        toggleRecapFields();
+        console.log("Texte brut lu par l'IA :", text);
+        renderBatchTable();
+        
     } catch (err) {
         statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
         console.error(err);
     }
+    
+    event.target.value = ""; // Réinitialise l'input pour pouvoir renvoyer la même image
 }
 
-function saveRecapEntry() {
-    const type = document.getElementById('recap-type').value;
-    const name = document.getElementById('recap-name').value.trim();
-    const price = parseInt(document.getElementById('recap-price').value);
+function renderBatchTable() {
+    document.getElementById('batch-container').style.display = 'block';
+    const tbody = document.getElementById('batch-tbody');
+    tbody.innerHTML = '';
+    
+    currentBatch.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>
+                <select onchange="updateBatchItem(${index}, 'type', this.value)" style="padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;">
+                    <option value="sale" ${item.type === 'sale' ? 'selected' : ''}>Vente</option>
+                    <option value="listing" ${item.type === 'listing' ? 'selected' : ''}>Mise en vente</option>
+                </select>
+            </td>
+            <td><input type="text" value="${item.name}" onchange="updateBatchItem(${index}, 'name', this.value)" style="width:100px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><input type="number" value="${item.price}" onchange="updateBatchItem(${index}, 'price', this.value)" style="width:70px; padding:4px; font-size:11px; border:1px solid #ccc; border-radius:4px;"></td>
+            <td><button class="delete-btn" style="width:24px; height:24px; font-size:10px;" onclick="removeFromBatch(${index})">✖</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
 
-    if (!name || isNaN(price)) return alert("Veuillez remplir le nom et le prix.");
+function updateBatchItem(index, key, value) {
+    if (key === 'price') value = parseInt(value) || 0;
+    currentBatch[index][key] = value;
+}
 
-    const now = Date.now();
-
-    if (type === 'listing') {
-        // Mise en vente = date d'aujourd'hui
-        recapStock.push({ id: now, name: name, listedAt: now, soldAt: null });
+function removeFromBatch(index) {
+    currentBatch.splice(index, 1);
+    if(currentBatch.length === 0) {
+        document.getElementById('batch-container').style.display = 'none';
+        document.getElementById('ocr-status').innerHTML = "Tableau vidé.";
     } else {
-        const autoList = document.getElementById('recap-auto-list').checked;
-        
-        if (autoList) {
-            // Vente + Mise en vente en même temps = date d'aujourd'hui pour les deux
-            recapStock.push({ id: now, name: name, listedAt: now, soldAt: now });
+        renderBatchTable();
+    }
+}
+
+function addManualToBatch() {
+    const type = document.getElementById('batch-add-type').value;
+    const name = document.getElementById('batch-add-name').value.trim();
+    const price = parseInt(document.getElementById('batch-add-price').value) || 0;
+    
+    if(!name || price <= 0) return alert("Veuillez remplir un nom de monture et un prix valide.");
+    
+    currentBatch.push({ type, name, price });
+    renderBatchTable();
+    
+    document.getElementById('batch-add-name').value = '';
+    document.getElementById('batch-add-price').value = '';
+}
+
+function confirmBatch() {
+    if (currentBatch.length === 0) return alert("Le tableau est vide.");
+    
+    const now = Date.now();
+    const autoList = document.getElementById('recap-auto-list').checked;
+
+    currentBatch.forEach((item, index) => {
+        // On rajoute l'index au Date.now() pour éviter que les IDs soient identiques si ça boucle trop vite
+        const uniqueId = now + index; 
+
+        if (item.type === 'listing') {
+            recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: null });
         } else {
-            // On cherche la mise en vente la plus ancienne non vendue
-            let oldestUnsold = recapStock.filter(item => item.name === name && item.soldAt === null)
-                                         .sort((a, b) => a.listedAt - b.listedAt)[0];
-            
-            if (oldestUnsold) {
-                oldestUnsold.soldAt = now;
+            if (autoList) {
+                recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
             } else {
-                // S'il n'y avait pas de mise en vente enregistrée, on la crée automatiquement
-                recapStock.push({ id: now, name: name, listedAt: now, soldAt: now });
+                let oldestUnsold = recapStock.filter(s => s.name === item.name && s.soldAt === null)
+                                             .sort((a, b) => a.listedAt - b.listedAt)[0];
+                if (oldestUnsold) {
+                    oldestUnsold.soldAt = now;
+                } else {
+                    recapStock.push({ id: uniqueId, name: item.name, listedAt: now, soldAt: now });
+                }
             }
         }
-    }
+    });
 
     localStorage.setItem('dofus_recap_stock', JSON.stringify(recapStock));
     renderRecapTable();
-    alert("Donnée enregistrée !");
     
-    // Reset inputs
-    document.getElementById('recap-name').value = '';
-    document.getElementById('recap-price').value = '';
-    document.getElementById('ocr-status').innerHTML = '';
+    currentBatch = [];
+    document.getElementById('batch-container').style.display = 'none';
+    document.getElementById('ocr-status').innerHTML = "✅ Données validées et ajoutées à vos statistiques !";
 }
 
 function renderRecapTable() {
     const tbody = document.getElementById('recap-tbody');
-    if(!tbody) return;
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     const stats = {};
@@ -934,7 +973,7 @@ function renderRecapTable() {
         
         if (data.sold > 0) {
             const avgSpeedMs = data.totalSpeedMs / data.sold;
-            let days = avgSpeedMs / 86400000;
+            let days = avgSpeedMs / 86400000; // Millisecondes dans un jour
             speedDays = days < 1 ? "< 1 j" : Math.round(days) + " j";
         }
 
@@ -952,13 +991,3 @@ function renderRecapTable() {
             <td style="font-weight:bold; color:#0056b3;">${speedDays}</td>
         `;
         tbody.appendChild(tr);
-    }
-}
-
-// On lance le rendu du tableau au chargement (en respectant le chargement des timers)
-const oldOnload = window.onload;
-window.onload = () => {
-    if(oldOnload) oldOnload();
-    renderRecapTable();
-    toggleRecapFields(); // Masque la case "Jours restants" immédiatement
-};
