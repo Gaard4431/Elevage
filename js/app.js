@@ -800,7 +800,10 @@ let recapStock = JSON.parse(localStorage.getItem('dofus_recap_stock')) || [];
 
 function toggleRecapFields() {
     const type = document.getElementById('recap-type').value;
-    document.getElementById('row-recap-days').style.display = type === 'listing' ? 'flex' : 'none';
+    // On masque la ligne des "jours restants" puisqu'on met la date d'aujourd'hui par défaut
+    const daysRow = document.getElementById('row-recap-days');
+    if (daysRow) daysRow.style.display = 'none';
+    
     document.getElementById('row-recap-auto').style.display = type === 'sale' ? 'flex' : 'none';
 }
 
@@ -809,52 +812,49 @@ async function processScreenshot(event) {
     if (!file) return;
 
     const statusDiv = document.getElementById('ocr-status');
-    statusDiv.innerHTML = "⏳ Analyse de l'image en cours... (cela peut prendre quelques secondes)";
+    statusDiv.innerHTML = "⏳ Recherche du nom de la monture...";
 
     try {
         const worker = await Tesseract.createWorker("fra");
         const { data: { text } } = await worker.recognize(file);
         await worker.terminate();
 
-        // On sépare le texte par ligne pour trouver la bonne phrase
-        const lines = text.split('\n');
-        let found = false;
+        // 1. Générer la liste de TOUS les noms de montures (Muldos, DD, Volkornes)
+        let allMountNames = [];
+        for (let species in speciesData) {
+            for (let gen in speciesData[species].colorsByGen) {
+                allMountNames.push(...speciesData[species].colorsByGen[gen]);
+            }
+        }
+        // Trier par longueur décroissante (pour trouver "Doré et Emeraude" avant "Doré")
+        allMountNames = [...new Set(allMountNames)].sort((a, b) => b.length - a.length);
 
-        for (let line of lines) {
-            // Correction des petites fautes d'orthographe typiques de l'IA sur Dofus
-            let cleanedLine = line.replace(/Muido/gi, "Muldo")
-                                  .replace(/Valkorne/gi, "Volkorne");
-            
-            // --- REGEX VENTE ---
-            // On cherche un truc qui ressemble à "Vendu :" suivi du nom, de "pour" et du prix
-            // [o0a]ur capte "pour", "p0ur", "paur" si l'IA s'est trompée. [\d\s\.,Oo]+ capte le prix même avec des 'O'.
-            let saleMatch = cleanedLine.match(/(?:Vendu|endu)\s*:\s*(.*?)\s*p[o0a]ur\s*([\d\s\.,Oo]+)/i);
-            
-            // --- REGEX MISE EN VENTE ---
-            let listMatch = cleanedLine.match(/(?:En\s*vente|vente)\s*:\s*(.*?)\s*\(\s*([\d\s\.,Oo]+).*?\)\s*-\s*(\d+)/i) || 
-                            cleanedLine.match(/(?:En\s*vente|vente)\s*:\s*(.*?)\s*\(\s*([\d\s\.,Oo]+)/i);
+        // Nettoyer le texte de l'IA (retirer les accents et passer en minuscules)
+        const cleanString = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+        const cleanedText = cleanString(text);
 
-            if (saleMatch) {
-                document.getElementById('recap-type').value = 'sale';
-                document.getElementById('recap-name').value = cleanMountName(saleMatch[1]);
-                document.getElementById('recap-price').value = cleanPrice(saleMatch[2]);
-                statusDiv.innerHTML = "✅ Vente détectée ! Vérifiez et enregistrez.";
-                found = true;
-                break;
-            } else if (listMatch) {
-                document.getElementById('recap-type').value = 'listing';
-                document.getElementById('recap-name').value = cleanMountName(listMatch[1]);
-                document.getElementById('recap-price').value = cleanPrice(listMatch[2]);
-                if (listMatch[3]) document.getElementById('recap-days').value = parseInt(listMatch[3]);
-                statusDiv.innerHTML = "✅ Mise en vente détectée ! Vérifiez et enregistrez.";
-                found = true;
+        let foundName = "";
+        for (let name of allMountNames) {
+            if (cleanedText.includes(cleanString(name))) {
+                foundName = name;
                 break;
             }
         }
 
-        if (!found) {
-            statusDiv.innerHTML = "❌ L'IA n'a pas réussi à identifier le texte. Remplissez manuellement.";
-            console.log("Texte brut lu par l'IA pour t'aider :", text); // Visible en faisant F12 sur PC
+        // 2. Tenter de trouver le prix (le plus grand nombre trouvé)
+        let numbers = text.replace(/\s/g, '').match(/\d{3,}/g); 
+        let likelyPrice = "";
+        if (numbers && numbers.length > 0) {
+            likelyPrice = Math.max(...numbers.map(Number));
+        }
+
+        if (foundName) {
+            document.getElementById('recap-name').value = foundName;
+            if (likelyPrice) document.getElementById('recap-price').value = likelyPrice;
+            statusDiv.innerHTML = "✅ Monture trouvée ! Vérifiez le prix et validez.";
+        } else {
+            statusDiv.innerHTML = "❌ Nom introuvable. Remplissez manuellement.";
+            console.log("Texte lu par l'IA :", text); // Pour débuguer si besoin (F12)
         }
         
         toggleRecapFields();
@@ -862,21 +862,6 @@ async function processScreenshot(event) {
         statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
         console.error(err);
     }
-}
-
-// Fonction pour extraire le nom pur de la monture
-function cleanMountName(rawName) {
-    return rawName.replace(/Certificat\s*de\s*monture\s*-\s*/gi, '')
-                  .replace(/Certificat\s*de\s*/gi, '')
-                  .replace(/Certihcat\s*de\s*/gi, '')
-                  .replace(/\[|\]|\*|:/g, '') // Retire les crochets ou étoiles parasites
-                  .trim();
-}
-
-// Fonction pour transformer les fautes de frappe de prix en vrais chiffres
-function cleanPrice(rawPrice) {
-    // Remplace les lettres 'O' ou 'o' par des zéros, puis ne garde que les chiffres
-    return parseInt(rawPrice.replace(/[Oo]/g, '0').replace(/[^\d]/g, ''));
 }
 
 function saveRecapEntry() {
@@ -889,27 +874,23 @@ function saveRecapEntry() {
     const now = Date.now();
 
     if (type === 'listing') {
-        const daysRem = parseInt(document.getElementById('recap-days').value) || 30;
-        // On calcule la date de mise en vente (Aujourd'hui moins le temps écoulé)
-        const daysElapsed = 30 - daysRem;
-        const listedAt = now - (daysElapsed * 86400000); // 86 400 000 ms par jour
-        
-        recapStock.push({ id: now, name: name, listedAt: listedAt, soldAt: null });
+        // Mise en vente = date d'aujourd'hui
+        recapStock.push({ id: now, name: name, listedAt: now, soldAt: null });
     } else {
         const autoList = document.getElementById('recap-auto-list').checked;
         
         if (autoList) {
-            // Si on coche l'ajout auto, on crée un stock mis en vente et vendu instantanément
+            // Vente + Mise en vente en même temps = date d'aujourd'hui pour les deux
             recapStock.push({ id: now, name: name, listedAt: now, soldAt: now });
         } else {
-            // Sinon, on cherche la plus ancienne mise en vente non vendue de cette monture
+            // On cherche la mise en vente la plus ancienne non vendue
             let oldestUnsold = recapStock.filter(item => item.name === name && item.soldAt === null)
                                          .sort((a, b) => a.listedAt - b.listedAt)[0];
             
             if (oldestUnsold) {
                 oldestUnsold.soldAt = now;
             } else {
-                // S'il n'y avait pas de mise en vente enregistrée, on la crée avec vitesse = 0 pour ne pas casser les stats
+                // S'il n'y avait pas de mise en vente enregistrée, on la crée automatiquement
                 recapStock.push({ id: now, name: name, listedAt: now, soldAt: now });
             }
         }
@@ -927,6 +908,7 @@ function saveRecapEntry() {
 
 function renderRecapTable() {
     const tbody = document.getElementById('recap-tbody');
+    if(!tbody) return;
     tbody.innerHTML = '';
 
     const stats = {};
@@ -973,7 +955,10 @@ function renderRecapTable() {
     }
 }
 
-// Lancer le rendu du tableau au chargement
-document.addEventListener('DOMContentLoaded', () => {
+// On lance le rendu du tableau au chargement (en respectant le chargement des timers)
+const oldOnload = window.onload;
+window.onload = () => {
+    if(oldOnload) oldOnload();
     renderRecapTable();
-});
+    toggleRecapFields(); // Masque la case "Jours restants" immédiatement
+};
