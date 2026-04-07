@@ -6,7 +6,8 @@
     <title>Chrono & Élevage Dofus</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" href="icon.png?v=2" type="image/png">
+    <link rel="icon" href="icon.png?v=3" type="image/png">
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
 
@@ -16,6 +17,7 @@
             <button class="main-tab-btn" onclick="switchMainTab('timer2')">Timer Carac</button>
             <button class="main-tab-btn" onclick="switchMainTab('gen')">Élevage</button>
             <button class="main-tab-btn" onclick="switchMainTab('renta')">Renta Carburants</button>
+            <button class="main-tab-btn" onclick="switchMainTab('recap')">Récap Ventes</button>
         </div>
 
         <div id="tab-timer1" class="tab-content active">
@@ -160,8 +162,7 @@
                         <th id="renta-header-ratio" class="renta-color-header">Prix / 20 000</th>
                     </tr>
                 </thead>
-                <tbody id="renta-tbody">
-                    </tbody>
+                <tbody id="renta-tbody"></tbody>
             </table>
 
             <div class="compare-box">
@@ -169,6 +170,58 @@
                 <div class="compare-checkboxes" id="compare-checkboxes"></div>
                 <div id="compare-result" class="compare-result" style="display: none;"></div>
             </div>
+        </div>
+
+        <div id="tab-recap" class="tab-content">
+            <div style="background: #eef8f0; padding: 15px; border-radius: 8px; border: 1px solid #c3e6cb; margin-bottom: 15px; text-align: center;">
+                <h4 style="margin: 0 0 10px 0; color: #28a745;">Scanner une capture d'écran du chat</h4>
+                <input type="file" id="ocr-upload" accept="image/*" onchange="processScreenshot(event)" style="display: none;">
+                <label for="ocr-upload" class="btn-launch" style="display: inline-block; width: auto; padding: 10px 20px; cursor: pointer; margin-bottom: 5px;">📁 Importer une image</label>
+                <div id="ocr-status" style="font-size: 13px; font-weight: bold; color: #555; margin-top: 5px;"></div>
+            </div>
+
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 15px;">
+                <h4 style="margin: 0 0 10px 0; font-size: 14px;">Validation manuelle</h4>
+                <div class="form-row">
+                    <label>Type :</label>
+                    <select id="recap-type" onchange="toggleRecapFields()" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; width: 100%;">
+                        <option value="sale">Vente (Vendu : ...)</option>
+                        <option value="listing">Mise en vente (En vente : ...)</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label>Monture :</label>
+                    <input type="text" id="recap-name" placeholder="Ex: Muldo Doré" style="width: 100%;">
+                </div>
+                <div class="form-row">
+                    <label>Prix (kamas) :</label>
+                    <input type="number" id="recap-price" placeholder="Ex: 250000" style="width: 100%;">
+                </div>
+                <div class="form-row" id="row-recap-days" style="display: none;">
+                    <label>Jours restants :</label>
+                    <input type="number" id="recap-days" value="30" style="width: 100%;">
+                </div>
+                <div class="form-row" id="row-recap-auto">
+                    <label style="width: 100%; display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer;">
+                        <input type="checkbox" id="recap-auto-list" style="transform: scale(1.2);"> 
+                        Ajouter aussi cette vente à la "Mise en vente"
+                    </label>
+                </div>
+                <button class="btn-launch" style="background: #007bff; margin-top: 10px;" onclick="saveRecapEntry()">✅ Enregistrer la donnée</button>
+            </div>
+
+            <table class="renta-table">
+                <thead>
+                    <tr style="background: #495057; color: white;">
+                        <th>Monture</th>
+                        <th>En vente</th>
+                        <th>Vendus</th>
+                        <th>Taux (%)</th>
+                        <th>Vitesse (Jours)</th>
+                    </tr>
+                </thead>
+                <tbody id="recap-tbody"></tbody>
+            </table>
         </div>
 
         <hr style="width:100%; border:1px solid #ddd; margin: 20px 0 10px 0;">
