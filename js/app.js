@@ -816,33 +816,67 @@ async function processScreenshot(event) {
         const { data: { text } } = await worker.recognize(file);
         await worker.terminate();
 
-        // Nettoyage des fautes d'OCR classiques sur Dofus (ex: Muido -> Muldo)
-        let cleanedText = text.replace(/Muido/gi, "Muldo").replace(/\n/g, " ");
+        // On sépare le texte par ligne pour trouver la bonne phrase
+        const lines = text.split('\n');
+        let found = false;
 
-        // Regex pour "Vendu"
-        const saleMatch = cleanedText.match(/Vendu\s*:\s*Certificat\s*de\s*monture\s*-\s*(.*?)\s*pour\s*([\d\s]+)\s*Kamas/i);
-        // Regex pour "En vente"
-        const listMatch = cleanedText.match(/En\s*vente\s*:\s*Certificat\s*de\s*monture\s*-\s*(.*?)\s*\(\s*([\d\s]+)\s*Kamas\s*\)\s*-\s*(\d+)\s*j/i);
+        for (let line of lines) {
+            // Correction des petites fautes d'orthographe typiques de l'IA sur Dofus
+            let cleanedLine = line.replace(/Muido/gi, "Muldo")
+                                  .replace(/Valkorne/gi, "Volkorne");
+            
+            // --- REGEX VENTE ---
+            // On cherche un truc qui ressemble à "Vendu :" suivi du nom, de "pour" et du prix
+            // [o0a]ur capte "pour", "p0ur", "paur" si l'IA s'est trompée. [\d\s\.,Oo]+ capte le prix même avec des 'O'.
+            let saleMatch = cleanedLine.match(/(?:Vendu|endu)\s*:\s*(.*?)\s*p[o0a]ur\s*([\d\s\.,Oo]+)/i);
+            
+            // --- REGEX MISE EN VENTE ---
+            let listMatch = cleanedLine.match(/(?:En\s*vente|vente)\s*:\s*(.*?)\s*\(\s*([\d\s\.,Oo]+).*?\)\s*-\s*(\d+)/i) || 
+                            cleanedLine.match(/(?:En\s*vente|vente)\s*:\s*(.*?)\s*\(\s*([\d\s\.,Oo]+)/i);
 
-        if (saleMatch) {
-            document.getElementById('recap-type').value = 'sale';
-            document.getElementById('recap-name').value = saleMatch[1].trim();
-            document.getElementById('recap-price').value = parseInt(saleMatch[2].replace(/\s/g, ''));
-            statusDiv.innerHTML = "✅ Vente détectée ! Vérifiez et enregistrez.";
-        } else if (listMatch) {
-            document.getElementById('recap-type').value = 'listing';
-            document.getElementById('recap-name').value = listMatch[1].trim();
-            document.getElementById('recap-price').value = parseInt(listMatch[2].replace(/\s/g, ''));
-            document.getElementById('recap-days').value = parseInt(listMatch[3]);
-            statusDiv.innerHTML = "✅ Mise en vente détectée ! Vérifiez et enregistrez.";
-        } else {
-            statusDiv.innerHTML = "❌ Impossible de lire précisément le texte. Remplissez manuellement.";
+            if (saleMatch) {
+                document.getElementById('recap-type').value = 'sale';
+                document.getElementById('recap-name').value = cleanMountName(saleMatch[1]);
+                document.getElementById('recap-price').value = cleanPrice(saleMatch[2]);
+                statusDiv.innerHTML = "✅ Vente détectée ! Vérifiez et enregistrez.";
+                found = true;
+                break;
+            } else if (listMatch) {
+                document.getElementById('recap-type').value = 'listing';
+                document.getElementById('recap-name').value = cleanMountName(listMatch[1]);
+                document.getElementById('recap-price').value = cleanPrice(listMatch[2]);
+                if (listMatch[3]) document.getElementById('recap-days').value = parseInt(listMatch[3]);
+                statusDiv.innerHTML = "✅ Mise en vente détectée ! Vérifiez et enregistrez.";
+                found = true;
+                break;
+            }
         }
+
+        if (!found) {
+            statusDiv.innerHTML = "❌ L'IA n'a pas réussi à identifier le texte. Remplissez manuellement.";
+            console.log("Texte brut lu par l'IA pour t'aider :", text); // Visible en faisant F12 sur PC
+        }
+        
         toggleRecapFields();
     } catch (err) {
         statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
         console.error(err);
     }
+}
+
+// Fonction pour extraire le nom pur de la monture
+function cleanMountName(rawName) {
+    return rawName.replace(/Certificat\s*de\s*monture\s*-\s*/gi, '')
+                  .replace(/Certificat\s*de\s*/gi, '')
+                  .replace(/Certihcat\s*de\s*/gi, '')
+                  .replace(/\[|\]|\*|:/g, '') // Retire les crochets ou étoiles parasites
+                  .trim();
+}
+
+// Fonction pour transformer les fautes de frappe de prix en vrais chiffres
+function cleanPrice(rawPrice) {
+    // Remplace les lettres 'O' ou 'o' par des zéros, puis ne garde que les chiffres
+    return parseInt(rawPrice.replace(/[Oo]/g, '0').replace(/[^\d]/g, ''));
 }
 
 function saveRecapEntry() {
