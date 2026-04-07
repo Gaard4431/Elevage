@@ -161,7 +161,8 @@
                         <th id="renta-header-ratio" class="renta-color-header">Prix / 20 000</th>
                     </tr>
                 </thead>
-                <tbody id="renta-tbody"></tbody>
+                <tbody id="renta-tbody">
+                    </tbody>
             </table>
 
             <div class="compare-box">
@@ -183,12 +184,13 @@
             <div id="batch-container" style="display: none; background: rgba(255, 243, 205, 0.8); padding: 15px; border-radius: 8px; border: 1px solid #ffeeba; margin-bottom: 15px;">
                 <h4 style="margin: 0 0 10px 0; color: #856404; font-size:14px; text-align:center;">Prévisualisation avant ajout</h4>
                 <div style="overflow-x: auto;">
-                    <table class="renta-table" style="margin-bottom: 10px; width: 100%; min-width:300px;">
+                    <table class="renta-table" style="margin-bottom: 10px; width: 100%; min-width:400px;">
                         <thead>
                             <tr style="background: #e9ecef; color: #333;">
                                 <th>Type</th>
                                 <th>Monture</th>
                                 <th>Prix</th>
+                                <th>Date</th>
                                 <th>❌</th>
                             </tr>
                         </thead>
@@ -196,19 +198,20 @@
                     </table>
                 </div>
 
-                <div style="display: flex; gap: 5px; margin-bottom: 10px; flex-wrap:wrap; justify-content:center;">
+                <div style="display: flex; gap: 5px; margin-bottom: 10px; flex-wrap:wrap; justify-content:center; align-items:center;">
                     <select id="batch-add-type" style="padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size:12px;">
-                        <option value="sale">Vente</option>
                         <option value="listing">Mise en vente</option>
+                        <option value="sale">Vente (Vendu)</option>
                     </select>
                     <input type="text" id="batch-add-name" placeholder="Nom..." style="padding: 6px; width:100px; font-size:12px; border:1px solid #ccc; border-radius:4px;">
                     <input type="number" id="batch-add-price" placeholder="Prix..." style="padding: 6px; width:80px; font-size:12px; border:1px solid #ccc; border-radius:4px;">
+                    <input type="date" id="batch-add-date" style="padding: 6px; font-size:12px; border:1px solid #ccc; border-radius:4px;">
                     <button class="btn-launch" style="width:auto; padding:6px 12px; margin:0;" onclick="addManualToBatch()">+ Ajouter</button>
                 </div>
 
                 <label style="width: 100%; display: flex; align-items: center; gap: 5px; font-weight: normal; cursor: pointer; font-size:12px; justify-content:center;">
                     <input type="checkbox" id="recap-auto-list" style="transform: scale(1.2);" checked> 
-                    Créer aussi une "Mise en vente" pour les Ventes
+                    Créer aussi une "Mise en vente" pour les Ventes conclues
                 </label>
 
                 <button class="btn-launch" style="background: #28a745; margin-top: 10px;" onclick="confirmBatch()">✅ Valider et Enregistrer</button>
