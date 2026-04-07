@@ -793,3 +793,153 @@ window.onload = () => {
         });
     }
 };
+// ==========================================
+// RÉCAP VENTES & OCR
+// ==========================================
+let recapStock = JSON.parse(localStorage.getItem('dofus_recap_stock')) || [];
+
+function toggleRecapFields() {
+    const type = document.getElementById('recap-type').value;
+    document.getElementById('row-recap-days').style.display = type === 'listing' ? 'flex' : 'none';
+    document.getElementById('row-recap-auto').style.display = type === 'sale' ? 'flex' : 'none';
+}
+
+async function processScreenshot(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const statusDiv = document.getElementById('ocr-status');
+    statusDiv.innerHTML = "⏳ Analyse de l'image en cours... (cela peut prendre quelques secondes)";
+
+    try {
+        const worker = await Tesseract.createWorker("fra");
+        const { data: { text } } = await worker.recognize(file);
+        await worker.terminate();
+
+        // Nettoyage des fautes d'OCR classiques sur Dofus (ex: Muido -> Muldo)
+        let cleanedText = text.replace(/Muido/gi, "Muldo").replace(/\n/g, " ");
+
+        // Regex pour "Vendu"
+        const saleMatch = cleanedText.match(/Vendu\s*:\s*Certificat\s*de\s*monture\s*-\s*(.*?)\s*pour\s*([\d\s]+)\s*Kamas/i);
+        // Regex pour "En vente"
+        const listMatch = cleanedText.match(/En\s*vente\s*:\s*Certificat\s*de\s*monture\s*-\s*(.*?)\s*\(\s*([\d\s]+)\s*Kamas\s*\)\s*-\s*(\d+)\s*j/i);
+
+        if (saleMatch) {
+            document.getElementById('recap-type').value = 'sale';
+            document.getElementById('recap-name').value = saleMatch[1].trim();
+            document.getElementById('recap-price').value = parseInt(saleMatch[2].replace(/\s/g, ''));
+            statusDiv.innerHTML = "✅ Vente détectée ! Vérifiez et enregistrez.";
+        } else if (listMatch) {
+            document.getElementById('recap-type').value = 'listing';
+            document.getElementById('recap-name').value = listMatch[1].trim();
+            document.getElementById('recap-price').value = parseInt(listMatch[2].replace(/\s/g, ''));
+            document.getElementById('recap-days').value = parseInt(listMatch[3]);
+            statusDiv.innerHTML = "✅ Mise en vente détectée ! Vérifiez et enregistrez.";
+        } else {
+            statusDiv.innerHTML = "❌ Impossible de lire précisément le texte. Remplissez manuellement.";
+        }
+        toggleRecapFields();
+    } catch (err) {
+        statusDiv.innerHTML = "❌ Erreur lors de la lecture de l'image.";
+        console.error(err);
+    }
+}
+
+function saveRecapEntry() {
+    const type = document.getElementById('recap-type').value;
+    const name = document.getElementById('recap-name').value.trim();
+    const price = parseInt(document.getElementById('recap-price').value);
+
+    if (!name || isNaN(price)) return alert("Veuillez remplir le nom et le prix.");
+
+    const now = Date.now();
+
+    if (type === 'listing') {
+        const daysRem = parseInt(document.getElementById('recap-days').value) || 30;
+        // On calcule la date de mise en vente (Aujourd'hui moins le temps écoulé)
+        const daysElapsed = 30 - daysRem;
+        const listedAt = now - (daysElapsed * 86400000); // 86 400 000 ms par jour
+        
+        recapStock.push({ id: now, name: name, listedAt: listedAt, soldAt: null });
+    } else {
+        const autoList = document.getElementById('recap-auto-list').checked;
+        
+        if (autoList) {
+            // Si on coche l'ajout auto, on crée un stock mis en vente et vendu instantanément
+            recapStock.push({ id: now, name: name, listedAt: now, soldAt: now });
+        } else {
+            // Sinon, on cherche la plus ancienne mise en vente non vendue de cette monture
+            let oldestUnsold = recapStock.filter(item => item.name === name && item.soldAt === null)
+                                         .sort((a, b) => a.listedAt - b.listedAt)[0];
+            
+            if (oldestUnsold) {
+                oldestUnsold.soldAt = now;
+            } else {
+                // S'il n'y avait pas de mise en vente enregistrée, on la crée avec vitesse = 0 pour ne pas casser les stats
+                recapStock.push({ id: now, name: name, listedAt: now, soldAt: now });
+            }
+        }
+    }
+
+    localStorage.setItem('dofus_recap_stock', JSON.stringify(recapStock));
+    renderRecapTable();
+    alert("Donnée enregistrée !");
+    
+    // Reset inputs
+    document.getElementById('recap-name').value = '';
+    document.getElementById('recap-price').value = '';
+    document.getElementById('ocr-status').innerHTML = '';
+}
+
+function renderRecapTable() {
+    const tbody = document.getElementById('recap-tbody');
+    tbody.innerHTML = '';
+
+    const stats = {};
+
+    recapStock.forEach(item => {
+        if (!stats[item.name]) {
+            stats[item.name] = { listed: 0, sold: 0, totalSpeedMs: 0 };
+        }
+        
+        stats[item.name].listed++;
+        
+        if (item.soldAt !== null) {
+            stats[item.name].sold++;
+            let diffMs = item.soldAt - item.listedAt;
+            if (diffMs < 0) diffMs = 0;
+            stats[item.name].totalSpeedMs += diffMs;
+        }
+    });
+
+    for (const [name, data] of Object.entries(stats)) {
+        const taux = Math.round((data.sold / data.listed) * 100);
+        let speedDays = "-";
+        
+        if (data.sold > 0) {
+            const avgSpeedMs = data.totalSpeedMs / data.sold;
+            let days = avgSpeedMs / 86400000;
+            speedDays = days < 1 ? "< 1 j" : Math.round(days) + " j";
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight: bold; font-size: 12px;">${name}</td>
+            <td>${data.listed}</td>
+            <td style="color: #28a745; font-weight: bold;">${data.sold}</td>
+            <td>
+                <div style="background:#e9ecef; border-radius:4px; width:100%; height:8px; overflow:hidden; margin-bottom:2px;">
+                    <div style="background:${taux >= 50 ? '#28a745' : '#ffc107'}; height:100%; width:${taux}%;"></div>
+                </div>
+                <span style="font-size:11px;">${taux}%</span>
+            </td>
+            <td style="font-weight:bold; color:#0056b3;">${speedDays}</td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+// Lancer le rendu du tableau au chargement
+document.addEventListener('DOMContentLoaded', () => {
+    renderRecapTable();
+});
